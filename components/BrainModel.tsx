@@ -1,0 +1,82 @@
+'use client'
+import { useEffect, useMemo, useRef } from 'react'
+import { useGLTF } from '@react-three/drei'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
+import { P, S } from '../lib/progress'
+import { sstep, bell } from '../lib/math'
+import { buildPieces, Layer } from '../lib/pieces'
+import { organic } from '../lib/materials'
+
+const TARGET = 2.6 // world-space size of the brain
+const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, ...o }))
+// Overlapping neighbouring meshes z-fight, so their colours are kept close: contrast between them reads as speckle.
+function makeMaterials() {
+  const cortex = [0, 1, 2, 3].map((i) => mk({ color: new THREE.Color('#977872').offsetHSL(0, 0, (i - 1.5) * 0.006), sheenColor: new THREE.Color('#a8837b'), sheenRoughness: 0.7 }))
+  const sulcus = mk({ color: '#86665f', sheenColor: new THREE.Color('#8f6b64'), sheenRoughness: 0.8 })
+  const m: Record<Exclude<Layer, 'hidden' | 'cortex'>, THREE.Material> = {
+    cerebellum: mk({ color: '#8a6c64', roughness: 0.74 }),
+    deep: mk({ color: '#836a63', roughness: 0.55, clearcoat: 0.2 }),
+    tract: mk({ color: '#b5a899', roughness: 0.7 }),
+    vessel: mk({ color: '#5a1520', roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.4 }),
+    nerve: mk({ color: '#b8ad90', roughness: 0.65 }),
+    amygdala: mk({ color: '#8a5650', roughness: 0.6 }),
+  }
+  return { cortex, sulcus, m }
+}
+
+export default function BrainModel({ onReady }: { onReady: () => void }) {
+  const { scene } = useGLTF('/models/brain.glb', '/draco/')
+  const group = useRef<THREE.Group>(null)
+  const smooth = useRef({ x: 0, y: 0 })
+  const rig = useMemo(() => {
+    const built = buildPieces(scene)
+    const mats = makeMaterials()
+    // ~1.3M triangles: drop the thin nerve fibres on touch devices to protect frame rate
+    if (typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches) built.pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
+    built.pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m]; p.mesh.frustumCulled = false })
+    return { ...built, mats }
+  }, [scene])
+  const s = TARGET / rig.size
+  useEffect(() => { S.pieces = rig.pieces; S.norm = { c: rig.center, s: TARGET / rig.size }; onReady(); return () => { rig.mats.cortex.forEach((m) => m.dispose()); rig.mats.sulcus.dispose(); Object.values(rig.mats.m).forEach((m) => m.dispose()) } }, [rig, onReady])
+
+  const allMats = useMemo(() => [...rig.mats.cortex, rig.mats.sulcus, ...Object.values(rig.mats.m)] as THREE.Material[], [rig]), lastFade = useRef(1)
+  const q = useMemo(() => new THREE.Quaternion(), [])
+  const e = useMemo(() => new THREE.Euler(), [])
+  const tmp = useMemo(() => new THREE.Vector3(), []), fd = useMemo(() => new THREE.Vector3(), []), wp = useMemo(() => new THREE.Vector3(), [])
+  useFrame((state) => {
+    const g = group.current; if (!g) return
+    g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
+    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) } // last fragments dissolve while the alarm runs // the real brain is removed from the scene after the exit; the scan is a separate system
+    const p = P.value, t = state.clock.elapsedTime, red = P.reduced
+    if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { pc.mesh.getWorldPosition(wp); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
+    smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
+    const settle = sstep(0.3, 0.6, p), live = 1 - settle
+    g.rotation.y = (0.4 - 0.25 * p + (red ? 0 : Math.sin(t * 0.05) * 0.05 + smooth.current.x * 0.03)) * live
+    g.rotation.x = (red ? 0 : smooth.current.y * 0.03) * live
+    g.position.y = 0.22 * live
+    g.scale.setScalar(1 + 0.12 * sstep(0.1, 0.5, p))
+    const tremAmp = red ? 0 : bell(0.15, 0.28, 0.46, p)
+    for (const pc of rig.pieces) {
+      const u = Math.min(1, Math.max(0, (p - pc.start) / pc.dur))
+      const ease = u * u * u * (u * (6 * u - 15) + 10)
+      const drift = Math.max(0, p - pc.start - pc.dur) * 0.5
+      tmp.copy(pc.dir).multiplyScalar(pc.dist * (ease + drift)).add(pc.home)
+      if (!red) {
+        const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
+        const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
+        if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+      }
+      pc.mesh.position.copy(tmp)
+      const sp = ease + drift * 0.5
+      e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
+    }
+  })
+  return (
+    <group ref={group}>
+      <group scale={s} position={[-rig.center.x * s, -rig.center.y * s, -rig.center.z * s]}>
+        <primitive object={scene} />
+      </group>
+    </group>
+  )
+}
