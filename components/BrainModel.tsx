@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { P, S } from '../lib/progress'
 import { sstep, bell } from '../lib/math'
-import { buildPieces, Layer } from '../lib/pieces'
+import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
@@ -25,29 +25,46 @@ function makeMaterials() {
   return { cortex, sulcus, m }
 }
 
+type Rig = { pieces: Piece[]; center: THREE.Vector3; size: number }
+
 export default function BrainModel({ onReady }: { onReady: () => void }) {
   const { scene } = useGLTF('/models/brain.glb', '/draco/')
   const group = useRef<THREE.Group>(null)
   const smooth = useRef({ x: 0, y: 0 })
-  const rig = useMemo(() => {
-    const built = buildPieces(scene)
-    const mats = makeMaterials()
-    // ~1.3M triangles: drop the thin nerve fibres on touch devices to protect frame rate
-    if (typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches) built.pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
-    built.pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m]; p.mesh.frustumCulled = false })
-    return { ...built, mats }
-  }, [scene])
-  const s = TARGET / rig.size
-  useEffect(() => { S.pieces = rig.pieces; S.norm = { c: rig.center, s: TARGET / rig.size }; onReady(); return () => { rig.mats.cortex.forEach((m) => m.dispose()); rig.mats.sulcus.dispose(); Object.values(rig.mats.m).forEach((m) => m.dispose()) } }, [rig, onReady])
+  const mats = useMemo(makeMaterials, [])
+  const [rig, setRig] = useState<Rig | null>(null)
+  const builder = useRef<PieceBuilder | null>(null)
 
-  const allMats = useMemo(() => [...rig.mats.cortex, rig.mats.sulcus, ...Object.values(rig.mats.m)] as THREE.Material[], [rig]), lastFade = useRef(1)
+  // Spreads the one-time per-mesh setup for all ~436 brain pieces across many small timed steps
+  // instead of one long blocking burst. Runs entirely while the loading screen still covers the
+  // canvas, so nothing about what the user sees or when changes — only how the main thread is used.
+  useEffect(() => { builder.current = new PieceBuilder(scene); setRig(null) }, [scene])
+
+  useFrame(() => {
+    const b = builder.current
+    if (!b || b.done) return
+    if (b.step(6)) {
+      const { pieces, center, size } = b.result()
+      const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
+      // ~1.3M triangles: drop the thin nerve fibres on touch devices to protect frame rate
+      if (coarse) pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
+      pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m]; p.mesh.frustumCulled = false })
+      setRig({ pieces, center, size })
+    }
+  })
+
+  useEffect(() => { if (!rig) return; S.pieces = rig.pieces; S.norm = { c: rig.center, s: TARGET / rig.size }; onReady() }, [rig, onReady])
+  useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
+
+  const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
   const q = useMemo(() => new THREE.Quaternion(), [])
   const e = useMemo(() => new THREE.Euler(), [])
   const tmp = useMemo(() => new THREE.Vector3(), []), fd = useMemo(() => new THREE.Vector3(), []), wp = useMemo(() => new THREE.Vector3(), [])
+
   useFrame((state) => {
-    const g = group.current; if (!g) return
+    const g = group.current; if (!g || !rig) return
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
-    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) } // last fragments dissolve while the alarm runs // the real brain is removed from the scene after the exit; the scan is a separate system
+    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
     if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { pc.mesh.getWorldPosition(wp); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
@@ -72,6 +89,9 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
     }
   })
+
+  if (!rig) return null
+  const s = TARGET / rig.size
   return (
     <group ref={group}>
       <group scale={s} position={[-rig.center.x * s, -rig.center.y * s, -rig.center.z * s]}>
