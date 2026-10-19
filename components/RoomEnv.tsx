@@ -32,6 +32,16 @@ export function CanteenEnv() {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.47, 1.6]} material={o.floor}><planeGeometry args={[6.4, 10]} /></mesh>
+      {coarse && (
+        // phone-only: a clean, simple row of support legs + crossbeams under the platform — reads like a loading-dock frame, no clutter
+        <group>
+          {[-2.6, -1.3, 0, 1.3, 2.6].map((x, i) => (
+            <mesh key={`leg${i}`} position={[x, -2.5, -0.7]} material={o.steel}><cylinderGeometry args={[0.06, 0.06, 4.2, 10]} /></mesh>
+          ))}
+          <mesh position={[0, -0.85, -0.7]} material={o.steel}><boxGeometry args={[6.2, 0.1, 0.14]} /></mesh>
+          <mesh position={[0, -2.3, -0.7]} material={o.steel}><boxGeometry args={[6.2, 0.08, 0.12]} /></mesh>
+        </group>
+      )}
       {!coarse && (
         <>
           {/* structure continuing below the grate: pipes with flanges, run-lines, chassis beams, axle + half-sunk wheels, cables — fading into the dark */}

@@ -33,7 +33,7 @@ export default function Canteen() {
     </group>
   )
   return (
-    <group scale={0.75} position={[0, coarse ? -0.1 : 0.3, 0]}>
+    <group scale={coarse ? 0.68 : 0.75} position={[0, coarse ? -0.25 : 0.3, 0]}>
       <group rotation={[0, -1.0, 0]} position={[0, 0, -0.9]}>
         <mesh position={[0, -0.22, 0]} material={o.dark}><boxGeometry args={[1.7, 0.1, 2.2]} /></mesh>
         <RoundedBox args={[1.5, 0.8, 2]} radius={0.06} smoothness={3} position={[0, 0.2, 0]} material={o.rust} />

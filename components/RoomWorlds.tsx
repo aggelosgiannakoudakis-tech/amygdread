@@ -25,8 +25,9 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only vertical anchors for the two stacked rooms — tuned so Canteen isn't too high and there's a clean gap before Dear Mother
-const PORTRAIT_PY: [number, number] = [1.05, -1.55]
+// phone-only vertical anchors for the two stacked rooms — tuned so Canteen has headroom and the gap before Dear Mother is tight but clean
+// (these two numbers are the ones to nudge if spacing ever needs a tiny tweak)
+const PORTRAIT_PY: [number, number] = [0.65, -1.4]
 
 function Room({ i }: { i: number }) {
   const room = rooms[i], cfg = CFG[i]
@@ -55,10 +56,10 @@ function Room({ i }: { i: number }) {
     <>
     <mesh ref={beacon} position={[px, py + 0.2, -31]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
     <group ref={g} position={[px, py, -30]} scale={s} visible={false}>
-      <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
+      <mesh position={[0, 0.2, -1.8]}><planeGeometry args={coarse ? [4, 3.2] : [7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
       {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
       {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
-      {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
+      {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={[l.p[0], coarse ? l.p[1] * 0.5 : l.p[1], l.p[2]] as [number, number, number]} color={l.c} distance={coarse ? 5 : 12} decay={2} intensity={0} />)}
       {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
       <Html position={[0, -2.35, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
@@ -72,7 +73,7 @@ function Room({ i }: { i: number }) {
     </>
   )
 }
-// phone-only: a soft dark band between the two stacked rooms so they read as separate spaces instead of overlapping
+// phone-only: a slim dark gradient line between the two stacked rooms so they read as separate spaces instead of overlapping
 function PhoneDivider() {
   const ref = useRef<THREE.Mesh>(null)
   const tex = useMemo(() => {
@@ -91,7 +92,7 @@ function PhoneDivider() {
   const midY = (PORTRAIT_PY[0] + PORTRAIT_PY[1]) / 2
   return (
     <mesh ref={ref} position={[0, midY, -29]}>
-      <planeGeometry args={[8, 2.6]} />
+      <planeGeometry args={[8, 1.5]} />
       <meshBasicMaterial map={tex} color="#000000" transparent opacity={0} depthWrite={false} />
     </mesh>
   )
