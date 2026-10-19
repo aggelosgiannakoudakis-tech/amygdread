@@ -1,8 +1,7 @@
 'use client'
 import { Suspense, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { EffectComposer, DepthOfField, ChromaticAberration, ToneMapping } from '@react-three/postprocessing'
-import { ToneMappingMode } from 'postprocessing'
 import * as THREE from 'three'
 import BrainModel from './BrainModel'
 import CameraRig from './CameraRig'
@@ -12,21 +11,10 @@ import Wordmark3D from './Wordmark3D'
 import LabelDriver from './LabelDriver'
 import RoomWorlds from './RoomWorlds'
 import SpecimenRoom from './SpecimenRoom'
-import { P, FOCUS, LOAD } from '../lib/progress'
-import { bell } from '../lib/math'
+import { LOAD } from '../lib/progress'
 
-const OFF = new THREE.Vector2(0, 0)
-function Fx() {
-  const ca = useRef<any>(null)
-  useFrame(() => { const a = P.reduced ? 0 : 0.0007 * bell(0.38, 0.45, 0.56, P.value); ca.current?.offset?.set(a, a) })
-  return (
-    <EffectComposer multisampling={4}>
-      <DepthOfField target={FOCUS} focalLength={0.05} bokehScale={2} height={720} />
-      <ChromaticAberration ref={ca} offset={OFF} radialModulation={false} modulationOffset={0} />
-      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-    </EffectComposer>
-  )
-}
+const Fx = dynamic(() => import('./Fx'), { ssr: false })
+
 // Forces WebGL to compile every material's shader program ahead of time, while still hidden behind the loading screen,
 // instead of paying that cost the instant each object first becomes visible mid-scroll (the cause of the two scroll-triggered stutters).
 function Warmup() {
