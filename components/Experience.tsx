@@ -50,7 +50,24 @@ export default function Experience() {
     })
     const move = (e: PointerEvent) => { P.mx = (e.clientX / innerWidth) * 2 - 1; P.my = (e.clientY / innerHeight) * 2 - 1 }
     addEventListener('pointermove', move, { passive: true })
-    return () => { removeEventListener('pointermove', move); gsap.ticker.remove(tick); ctx.revert(); lenis.destroy(); P.target = P.value = P.rTarget = P.r = 0 }
+    // Mobile browsers resize the visible viewport as the address bar shows/hides while scrolling, and
+    // iOS in particular often does this WITHOUT firing a normal window "resize" event. Lenis/ScrollTrigger
+    // calculate the page's total scrollable distance once; if that goes stale, the page can report "end of
+    // scroll" before the user has actually reached the real bottom of the content. We correct for this by:
+    // 1) listening to the dedicated visualViewport resize event (fires reliably on iOS/Android for this case)
+    // 2) forcing a couple of safety re-measurements shortly after load, in case no event fires at all.
+    let resizeTimer: ReturnType<typeof setTimeout>
+    const refresh = () => { lenis.resize(); ScrollTrigger.refresh() }
+    const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(refresh, 150) }
+    addEventListener('resize', onResize); addEventListener('orientationchange', onResize)
+    window.visualViewport?.addEventListener('resize', onResize)
+    const safety1 = setTimeout(refresh, 600), safety2 = setTimeout(refresh, 1800)
+    return () => {
+      removeEventListener('pointermove', move); removeEventListener('resize', onResize); removeEventListener('orientationchange', onResize)
+      window.visualViewport?.removeEventListener('resize', onResize)
+      clearTimeout(resizeTimer); clearTimeout(safety1); clearTimeout(safety2)
+      gsap.ticker.remove(tick); ctx.revert(); lenis.destroy(); P.target = P.value = P.rTarget = P.r = 0
+    }
   }, [])
 
   return (
