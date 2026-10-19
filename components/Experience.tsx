@@ -16,6 +16,7 @@ import LoadingSequence from './LoadingSequence'
 import AudioDirector from './AudioDirector'
 import SoundControl from './SoundControl'
 import Observation from './Observation'
+import ErrorBoundary from './ErrorBoundary'
 import { E, leaveRoom } from '../lib/enter'
 const BrainScene = dynamic(() => import('./BrainScene'), { ssr: false })
 
@@ -55,7 +56,9 @@ export default function Experience() {
   return (
     <main>
       <div className="fixed inset-0 z-[2]" style={{ pointerEvents: booking !== null ? 'none' : 'auto' }} aria-label="Interactive 3D human brain">
-        <BrainScene onReady={onReady} />
+        <ErrorBoundary>
+          <BrainScene onReady={onReady} />
+        </ErrorBoundary>
       </div>
       <LabelLayer /><ThreatWarning /><div className="vignette" /><div className="grain" />
       <Overlay ready={started} />
