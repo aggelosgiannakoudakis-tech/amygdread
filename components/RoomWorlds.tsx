@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
@@ -25,20 +25,17 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-const CANTEEN_CLIP_Y = 0.6
-// phone-only vertical anchors for the two stacked rooms — Canteen brought down a bit (was too high / hidden behind background pillars)
-const PORTRAIT_PY: [number, number] = [1.7, -1.3]
+// phone-only vertical anchors for the two stacked rooms — tuned so Canteen isn't too high and there's a clean gap before Dear Mother
+const PORTRAIT_PY: [number, number] = [1.05, -1.55]
 
 function Room({ i }: { i: number }) {
   const room = rooms[i], cfg = CFG[i]
   const lightsToUse = coarse ? cfg.lights.slice(0, 3) : cfg.lights
   const beacon = useRef<THREE.Mesh>(null), g = useRef<THREE.Group>(null), art = useRef<THREE.Group>(null), L = useRef<THREE.PointLight[]>([]), txt = useRef<HTMLDivElement>(null)
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
-  const { size, gl } = useThree(), portrait = size.width / size.height < 1
+  const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const tex = useMemo(glowTexture, []), portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [])
-  const roomClip = useMemo(() => (coarse && i === 0 ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), -CANTEEN_CLIP_Y)] : []), [i])
-  useEffect(() => { if (coarse && i === 0) gl.localClippingEnabled = true }, [gl, i])
   useFrame(({ clock }) => {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
@@ -46,7 +43,7 @@ function Room({ i }: { i: number }) {
     a.h += ((H.i === i ? 1 : 0) - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
-    if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => { if (!mats.current.includes(m)) { m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true; if (coarse && i === 0) { (m as any).clippingPlanes = roomClip; (m as any).clipShadows = false } mats.current.push(m) } }) })
+    if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => { if (!mats.current.includes(m)) { m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true; mats.current.push(m) } }) })
     const op = Math.pow(rev, 1.4) * (1 - 0.45 * a.q) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1))
     mats.current.forEach((m) => { m.opacity = m.userData.b * op })
     cfg.lights.forEach((l, j) => { const pl = L.current[j]; if (pl) pl.intensity = l.i * Math.pow(rev, 1.2) * (1 + 0.9 * a.h * (j === 0 ? 1 : i === 1 && j === 1 ? 1.2 : 0.3)) * (1 - 0.5 * a.q) * (1 + (red ? 0 : 0.05 * Math.sin(t * 0.8 + i))) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1)) * (i === 0 ? 1 + 0.8 * Math.max(0, E.k) : 1 - 0.95 * E.dark) * (i === 0 && j === 3 ? 1 + 0.15 * a.h * Math.sin(t * 19 + Math.sin(t * 3) * 4) : 1) })
@@ -94,7 +91,7 @@ function PhoneDivider() {
   const midY = (PORTRAIT_PY[0] + PORTRAIT_PY[1]) / 2
   return (
     <mesh ref={ref} position={[0, midY, -29]}>
-      <planeGeometry args={[8, 3.2]} />
+      <planeGeometry args={[8, 2.6]} />
       <meshBasicMaterial map={tex} color="#000000" transparent opacity={0} depthWrite={false} />
     </mesh>
   )

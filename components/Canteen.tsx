@@ -33,7 +33,7 @@ export default function Canteen() {
     </group>
   )
   return (
-    <group scale={0.75} position={[0, coarse ? 0.05 : 0.3, 0]}>
+    <group scale={0.75} position={[0, coarse ? -0.1 : 0.3, 0]}>
       <group rotation={[0, -1.0, 0]} position={[0, 0, -0.9]}>
         <mesh position={[0, -0.22, 0]} material={o.dark}><boxGeometry args={[1.7, 0.1, 2.2]} /></mesh>
         <RoundedBox args={[1.5, 0.8, 2]} radius={0.06} smoothness={3} position={[0, 0.2, 0]} material={o.rust} />
@@ -55,8 +55,12 @@ export default function Canteen() {
         <mesh position={[0, -0.2, 3.08]} rotation={[Math.PI / 2, 0, 0]} material={o.dark}><torusGeometry args={[0.14, 0.03, 8, 20]} /></mesh>
         <mesh position={[0, -0.62, 2.8]} material={o.dark}><cylinderGeometry args={[0.04, 0.04, 0.8, 8]} /></mesh>
       </group>
-      <mesh position={[-3.2, 0.6, -2.6]} material={o.dark}><cylinderGeometry args={[0.1, 0.1, 9, 16]} /></mesh>
-      <mesh position={[0, 3, -2.8]} rotation={[0, 0, Math.PI / 2]} material={o.dark}><cylinderGeometry args={[0.07, 0.07, 7, 16]} /></mesh>
+      {!coarse && (
+        <>
+          <mesh position={[-3.2, 0.6, -2.6]} material={o.dark}><cylinderGeometry args={[0.1, 0.1, 9, 16]} /></mesh>
+          <mesh position={[0, 3, -2.8]} rotation={[0, 0, Math.PI / 2]} material={o.dark}><cylinderGeometry args={[0.07, 0.07, 7, 16]} /></mesh>
+        </>
+      )}
     </group>
   )
 }
