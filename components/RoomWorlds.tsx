@@ -62,7 +62,7 @@ function Room({ i }: { i: number }) {
       {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
       {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
       {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
-      <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+      {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
       <Html position={[0, -2.35, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
           <p className="font-mono text-[10px] tracking-[0.5em] text-bone/60">{room.n}</p>
