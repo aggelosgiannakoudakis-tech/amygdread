@@ -9,6 +9,7 @@ import { H } from '../lib/progress'
 const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
+const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 
 // The remains of a place that was used: stained wet concrete with faded warning stripes, a puddle, hanging cables, a dead lamp-shade with a weak bulb,
 // distant columns and a beam in the dark, drifting steam, an overturned bucket, cans and a pot lid.
@@ -45,8 +46,12 @@ export function CanteenEnv() {
       {o.cables.map((c, i) => <mesh key={i} material={o.cable}><tubeGeometry args={[c, 24, 0.022, 6, false]} /></mesh>)}
       <mesh position={[0, 3.1, -0.5]} material={o.steel}><coneGeometry args={[0.38, 0.3, 20, 1, true]} /></mesh>
       <mesh position={[0, 2.95, -0.5]} material={o.bulb}><sphereGeometry args={[0.07, 10, 10]} /></mesh>
-      {[-4.4, -1.4].map((x, i) => <mesh key={i} position={[x, 1.8, -5.5 - i]} material={o.steel}><cylinderGeometry args={[0.3, 0.3, 10, 14]} /></mesh>)}
-      <mesh position={[-1.8, 3.9, -5.8]} rotation={[0, 0, Math.PI / 2]} material={o.steel}><cylinderGeometry args={[0.16, 0.16, 5.5, 12]} /></mesh>
+      {!coarse && (
+        <>
+          {[-4.4, -1.4].map((x, i) => <mesh key={i} position={[x, 1.8, -5.5 - i]} material={o.steel}><cylinderGeometry args={[0.3, 0.3, 10, 14]} /></mesh>)}
+          <mesh position={[-1.8, 3.9, -5.8]} rotation={[0, 0, Math.PI / 2]} material={o.steel}><cylinderGeometry args={[0.16, 0.16, 5.5, 12]} /></mesh>
+        </>
+      )}
       {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) steam.current[k] = m }} position={[0.1 * k, 1 + k * 0.4, -0.2]}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={o.tex} color="#8a7a6a" opacity={0.1} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
       <mesh position={[-1.6, -0.34, 1.4]} rotation={[0, 0.5, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.18, 0.15, 0.3, 16, 1, true]} /></mesh>
       {[[-1.1, 1.7], [-0.8, 1.9], [0.9, 2.1]].map(([x, z], i) => <mesh key={i} position={[x, -0.41, z]} rotation={[0, 0, i === 1 ? Math.PI / 2 : 0]} material={o.rust}><cylinderGeometry args={[0.06, 0.06, 0.1, 10]} /></mesh>)}
@@ -61,7 +66,17 @@ export function TombEnv() {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) { const an = rnd(i, 1) * 6.28, r = 0.9 + rnd(i, 2) * 2.5, x = Math.cos(an) * r * 0.9, z = Math.sin(an) * r * 2 + 0.3; d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix) }
-    const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
+    const tm = dark('#050605', 0, 1)
+    const trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => {
+      if (coarse) {
+        // phone: shorter canopies pushed further back so they don't rise into the room above
+        const zf = z * 1.35
+        const h = 3 + rnd(i, 9) * 1
+        return { x, z: zf, h, br: [0, 1, 2].map((k) => V([[x, 1.2 + k * 0.3, zf], [x + (rnd(i * 3 + k, 7) - 0.5) * 0.9, 1.7 + k * 0.35, zf + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 1.4, 2.3 + k * 0.3, zf]])) }
+      }
+      const h = 6 + rnd(i, 9) * 2
+      return { x, z, h, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }
+    })
     const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
     const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
     const st = bake(512, 512, (u, v) => { const band = Math.floor((1 - v) * 8 + fbm(u * 3, v * 3, 9) * 2), cols = [[0.05, 0.035, 0.025], [0.1, 0.07, 0.045], [0.07, 0.06, 0.05], [0.13, 0.09, 0.06], [0.06, 0.05, 0.04], [0.1, 0.08, 0.06], [0.05, 0.04, 0.035], [0.08, 0.06, 0.05]], c = cols[band % 8], n = 0.7 + 0.6 * fbm(u * 30, v * 30, 5), stn = sm(0.74, 0.8, fbm(u * 14, v * 14, 6)); return [c[0] * n + 0.06 * stn, c[1] * n + 0.06 * stn, c[2] * n + 0.055 * stn, 1, 0, 0.5 + (n - 1) * 0.5] })

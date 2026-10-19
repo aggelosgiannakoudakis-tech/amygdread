@@ -25,9 +25,9 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// world-space Y cutoff for Canteen's geometry on phone, so its pillars never reach down into Dear Mother.
-// raise this number to cut off MORE of the pillars (show less), lower it to reveal more.
 const CANTEEN_CLIP_Y = 0.6
+// phone-only vertical anchors for the two stacked rooms — Canteen brought down a bit (was too high / hidden behind background pillars)
+const PORTRAIT_PY: [number, number] = [1.7, -1.3]
 
 function Room({ i }: { i: number }) {
   const room = rooms[i], cfg = CFG[i]
@@ -35,7 +35,7 @@ function Room({ i }: { i: number }) {
   const beacon = useRef<THREE.Mesh>(null), g = useRef<THREE.Group>(null), art = useRef<THREE.Group>(null), L = useRef<THREE.PointLight[]>([]), txt = useRef<HTMLDivElement>(null)
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
   const { size, gl } = useThree(), portrait = size.width / size.height < 1
-  const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? (i ? -1.3 : 2.1) : 0.4
+  const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const tex = useMemo(glowTexture, []), portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [])
   const roomClip = useMemo(() => (coarse && i === 0 ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), -CANTEEN_CLIP_Y)] : []), [i])
   useEffect(() => { if (coarse && i === 0) gl.localClippingEnabled = true }, [gl, i])
@@ -75,4 +75,28 @@ function Room({ i }: { i: number }) {
     </>
   )
 }
-export default function RoomWorlds() { return <><Room i={0} /><Room i={1} /></> }
+// phone-only: a soft dark band between the two stacked rooms so they read as separate spaces instead of overlapping
+function PhoneDivider() {
+  const ref = useRef<THREE.Mesh>(null)
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas'); c.width = 8; c.height = 256; const x = c.getContext('2d')!
+    const g = x.createLinearGradient(0, 0, 0, 256)
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.45, 'rgba(0,0,0,1)'); g.addColorStop(0.55, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)')
+    x.fillStyle = g; x.fillRect(0, 0, 8, 256)
+    return new THREE.CanvasTexture(c)
+  }, [])
+  useFrame(() => {
+    const m = ref.current; if (!m) return
+    const op = sstep(0.3, 0.5, P.r) * 0.85
+    ;(m.material as THREE.MeshBasicMaterial).opacity = op
+  })
+  if (!coarse) return null
+  const midY = (PORTRAIT_PY[0] + PORTRAIT_PY[1]) / 2
+  return (
+    <mesh ref={ref} position={[0, midY, -29]}>
+      <planeGeometry args={[8, 3.2]} />
+      <meshBasicMaterial map={tex} color="#000000" transparent opacity={0} depthWrite={false} />
+    </mesh>
+  )
+}
+export default function RoomWorlds() { return <><Room i={0} /><Room i={1} /><PhoneDivider /></> }

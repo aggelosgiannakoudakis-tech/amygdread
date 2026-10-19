@@ -7,6 +7,7 @@ import { sstep as sm } from '../lib/math'
 import { E } from '../lib/enter'
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t
+const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 // CANTEEN 66 — an abandoned wheeled field kitchen: chassis, axle, two spoked wheels, firebox casing with door + hatch, kettle with domed lid and handles, chimney, drawbar with ring and prop. Rust/peeling-paint maps are baked procedurally; "66" is a worn stencil decal on the casing.
 export default function Canteen() {
   const o = useMemo(() => {
@@ -32,7 +33,7 @@ export default function Canteen() {
     </group>
   )
   return (
-    <group scale={0.75} position={[0, 0.3, 0]}>
+    <group scale={0.75} position={[0, coarse ? 0.05 : 0.3, 0]}>
       <group rotation={[0, -1.0, 0]} position={[0, 0, -0.9]}>
         <mesh position={[0, -0.22, 0]} material={o.dark}><boxGeometry args={[1.7, 0.1, 2.2]} /></mesh>
         <RoundedBox args={[1.5, 0.8, 2]} radius={0.06} smoothness={3} position={[0, 0.2, 0]} material={o.rust} />
