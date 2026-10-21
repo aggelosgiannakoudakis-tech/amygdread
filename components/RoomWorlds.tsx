@@ -1,8 +1,7 @@
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, useGLTF } from '@react-three/drei'
-import { createPortal } from 'react-dom'
 import * as THREE from 'three'
 import { P, H } from '../lib/progress'
 import { sstep } from '../lib/math'
@@ -27,40 +26,42 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only vertical anchors: rooms stacked with a wide gap so they're visually distinct. Even with the
-// real clip boundary below, more separation gives each room more breathing room before anything gets clipped.
+// phone-only vertical anchors: rooms stacked with a wide gap so they're visually distinct.
 const PORTRAIT_PY: [number, number] = [3.6, -2.0]
 
-// Two world-space clip planes, recomputed every single frame from the REAL, live camera (position,
-// orientation, FOV) by PhoneRoomClip below — not a fixed guessed Y value. This represents "exactly this
-// row of pixels on screen" as a 3D plane, so it stays correct regardless of camera angle or perspective
-// (a static world-space Y plane failed because the floor's Y position never actually crossed it — the
-// visual "bleed" was a perspective effect, not a position problem). ROOM_CLIP[0] keeps only the screen
-// area ABOVE the split line (Canteen); ROOM_CLIP[1] keeps only the area BELOW it (Dear Mother).
+// Two clip planes recomputed every frame from the live camera, each representing "this exact row of
+// pixels on screen" (SPLIT_FRACTION of the canvas height). ROOM_CLIP[0] keeps only what's ABOVE the
+// line (Canteen), ROOM_CLIP[1] keeps only what's BELOW it (Dear Mother). Phone-only.
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
+const _F = new THREE.Vector3(), _U = new THREE.Vector3(), _R = new THREE.Vector3(), _D = new THREE.Vector3(), _N = new THREE.Vector3(), _Pos = new THREE.Vector3(), _Q = new THREE.Quaternion()
 
 function PhoneRoomClip() {
   const { camera } = useThree()
   useFrame(() => {
     if (!coarse) return
     const cam = camera as THREE.PerspectiveCamera
-    const fovV = THREE.MathUtils.degToRad(cam.fov)
-    const yNdc = 1 - 2 * SPLIT_FRACTION
-    const theta = Math.atan(Math.tan(fovV / 2) * yNdc)
-    const F = new THREE.Vector3(); cam.getWorldDirection(F)
-    const worldUp = new THREE.Vector3(0, 1, 0)
-    const R = new THREE.Vector3().crossVectors(F, worldUp)
-    if (R.lengthSq() < 1e-6) R.set(1, 0, 0); else R.normalize()
-    const U = new THREE.Vector3().crossVectors(R, F).normalize()
-    const dir = F.clone().multiplyScalar(Math.cos(theta)).addScaledVector(U, Math.sin(theta)).normalize()
-    const normal = new THREE.Vector3().crossVectors(R, dir)
-    if (normal.lengthSq() < 1e-6) normal.set(0, 1, 0); else normal.normalize()
-    if (normal.dot(U) < 0) normal.negate()
-    const constant = -normal.dot(cam.position)
-    ROOM_CLIP[0].normal.copy(normal); ROOM_CLIP[0].constant = constant
-    ROOM_CLIP[1].normal.copy(normal).negate(); ROOM_CLIP[1].constant = -constant
+    const theta = Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * (1 - 2 * SPLIT_FRACTION))
+    cam.getWorldQuaternion(_Q); cam.getWorldPosition(_Pos)
+    _F.set(0, 0, -1).applyQuaternion(_Q) // camera's real forward
+    _U.set(0, 1, 0).applyQuaternion(_Q)  // camera's real up (includes any roll from CameraRig)
+    _R.set(1, 0, 0).applyQuaternion(_Q)  // camera's real right
+    _D.copy(_F).multiplyScalar(Math.cos(theta)).addScaledVector(_U, Math.sin(theta)).normalize()
+    _N.crossVectors(_R, _D).normalize()
+    if (_N.dot(_U) < 0) _N.negate()
+    const constant = -_N.dot(_Pos)
+    ROOM_CLIP[0].normal.copy(_N); ROOM_CLIP[0].constant = constant
+    ROOM_CLIP[1].normal.copy(_N).negate(); ROOM_CLIP[1].constant = -constant
   })
   return null
+}
+
+// phone-only: full-screen text layer (same box as the canvas, so drei's Html positions text exactly as it
+// does on desktop), trimmed by a screen-fixed clip-path so each room's text can't cross the divider line.
+function makePhoneTextLayer(i: number) {
+  const el = document.createElement('div')
+  const clip = i === 0 ? `inset(0 0 ${(1 - SPLIT_FRACTION) * 100}% 0)` : `inset(${SPLIT_FRACTION * 100}% 0 0 0)`
+  el.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:40;clip-path:${clip};-webkit-clip-path:${clip};`
+  return el
 }
 
 function Room({ i }: { i: number }) {
@@ -71,7 +72,17 @@ function Room({ i }: { i: number }) {
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const tex = useMemo(glowTexture, [])
-  const portal = useMemo(() => ({ current: document.getElementById(coarse ? (i === 0 ? 'room-ui-top' : 'room-ui-bottom') : 'room-ui') as HTMLElement }), [i])
+  const portal = useMemo(() => {
+    if (!coarse) return { current: document.getElementById('room-ui') as HTMLElement }
+    const el = makePhoneTextLayer(i); document.body.appendChild(el)
+    return { current: el }
+  }, [i])
+  useEffect(() => {
+    if (!coarse) return
+    const el = portal.current
+    if (!el.isConnected) document.body.appendChild(el)
+    return () => { el.remove() }
+  }, [portal])
   useFrame(({ clock }) => {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
@@ -108,21 +119,31 @@ function Room({ i }: { i: number }) {
     </>
   )
 }
-// phone-only: a plain, screen-space-fixed divider (not a 3D anchor) locked to the exact same
-// SPLIT_FRACTION used by the text-clip containers and the real clip planes above, so all three
-// always agree on precisely the same line, no matter what the camera is doing.
+
+// phone-only divider. Built as a plain DOM element appended to <body> in an effect, NOT a react-dom portal
+// inside the 3D canvas (that crashed the 3D renderer on phones and caused the stuck loading screen).
+// Its box is the same full-screen box as the canvas, and the line sits at exactly SPLIT_FRACTION of it,
+// so it matches the 3D clip and the text clip.
 function PhoneDivider() {
   const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!coarse) return
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:45;opacity:0;'
+    const band = document.createElement('div')
+    band.style.cssText = `position:absolute;left:0;right:0;top:calc(${SPLIT_FRACTION * 100}% - 60px);height:120px;display:flex;align-items:center;`
+    const mask = document.createElement('div')
+    mask.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.96) 62%, rgba(0,0,0,0) 100%);'
+    const line = document.createElement('div')
+    line.style.cssText = 'position:relative;width:100%;height:2px;background:linear-gradient(90deg, rgba(60,80,255,0.95) 0%, rgba(150,70,220,0.95) 50%, rgba(255,60,55,0.95) 100%);box-shadow:0 0 14px rgba(130,90,220,0.55);'
+    band.appendChild(mask); band.appendChild(line); wrap.appendChild(band)
+    document.body.appendChild(wrap); ref.current = wrap
+    return () => { wrap.remove(); ref.current = null }
+  }, [])
   useFrame(() => { if (ref.current) ref.current.style.opacity = String(sstep(0.3, 0.42, P.r) * (1 - E.quiet)) })
-  if (!coarse || typeof document === 'undefined') return null
-  return createPortal(
-    <div ref={ref} style={{ position: 'fixed', left: 0, top: `calc(${SPLIT_FRACTION * 100}dvh - 60px)`, width: '100vw', height: '120px', opacity: 0, zIndex: 45, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.96) 62%, rgba(0,0,0,0) 100%)' }} />
-      <div style={{ position: 'relative', width: '100%', height: '2px', background: 'linear-gradient(90deg, rgba(60,80,255,0.95) 0%, rgba(150,70,220,0.95) 50%, rgba(255,60,55,0.95) 100%)', boxShadow: '0 0 14px rgba(130,90,220,0.55)' }} />
-    </div>,
-    document.body
-  )
+  return null
 }
+
 export default function RoomWorlds() {
   return (
     <>
