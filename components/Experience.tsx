@@ -6,6 +6,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { P, LENIS, LOAD } from '../lib/progress'
 import { clamp, bell } from '../lib/math'
+import { SPLIT_FRACTION } from '../lib/roomSplit'
 import Overlay from './Overlay'
 import LabelLayer from './LabelLayer'
 import CustomCursor from './CustomCursor'
@@ -80,7 +81,11 @@ export default function Experience() {
       <LabelLayer /><ThreatWarning /><div className="vignette" /><div className="grain" />
       <Overlay ready={started} />
       <div ref={timeline} className="relative z-10 h-[1000vh]" aria-hidden />
+      {/* Desktop uses this single overlay (unchanged). Phone uses the two clipped halves below instead,
+          so one room's text can never physically render on top of the other room's geometry. */}
       <div id="room-ui" className="pointer-events-none fixed inset-0 z-40" />
+      <div id="room-ui-top" className="pointer-events-none fixed inset-x-0 top-0 z-40 overflow-hidden" style={{ height: `${SPLIT_FRACTION * 100}dvh` }} />
+      <div id="room-ui-bottom" className="pointer-events-none fixed inset-x-0 z-40 overflow-hidden" style={{ top: `${SPLIT_FRACTION * 100}dvh`, height: `${(1 - SPLIT_FRACTION) * 100}dvh` }} />
       <TransitionFX />
       <Observation /><AudioDirector /><SoundControl /><LoadingSequence onDone={onDone} />
       {booking !== null && <Booking room={booking} onLeave={() => (history.state?.room !== undefined ? history.back() : leaveRoom())} />}
