@@ -27,7 +27,7 @@ function ModelSlot({ url }: { url: string }) {
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 // phone-only vertical anchors: rooms stacked with a wide gap so they're visually distinct.
-const PORTRAIT_PY: [number, number] = [3.6, -2.0]
+const PORTRAIT_PY: [number, number] = [1.4, -2.0]
 
 // Two clip planes recomputed every frame directly from the camera's real projection (via unproject,
 // Three.js's own tested math — not hand-derived trig), each representing "this exact row of pixels on
