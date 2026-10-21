@@ -29,28 +29,29 @@ const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').m
 // phone-only vertical anchors: rooms stacked with a wide gap so they're visually distinct.
 const PORTRAIT_PY: [number, number] = [3.6, -2.0]
 
-// Two clip planes recomputed every frame from the live camera, each representing "this exact row of
-// pixels on screen" (SPLIT_FRACTION of the canvas height). ROOM_CLIP[0] keeps only what's ABOVE the
-// line (Canteen), ROOM_CLIP[1] keeps only what's BELOW it (Dear Mother). Phone-only.
+// Two clip planes recomputed every frame directly from the camera's real projection (via unproject,
+// Three.js's own tested math — not hand-derived trig), each representing "this exact row of pixels on
+// screen" at SPLIT_FRACTION. ROOM_CLIP[0] keeps only what's ABOVE that row (Canteen's environment),
+// ROOM_CLIP[1] keeps only what's BELOW it (Dear Mother's environment). The direction is verified every
+// frame against a known point (top-center of screen), so it can't silently end up backwards. Phone-only.
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
-const _F = new THREE.Vector3(), _U = new THREE.Vector3(), _R = new THREE.Vector3(), _D = new THREE.Vector3(), _N = new THREE.Vector3(), _Pos = new THREE.Vector3(), _Q = new THREE.Quaternion()
+const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
 
 function PhoneRoomClip() {
   const { camera } = useThree()
   useFrame(() => {
     if (!coarse) return
     const cam = camera as THREE.PerspectiveCamera
-    const theta = Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * (1 - 2 * SPLIT_FRACTION))
-    cam.getWorldQuaternion(_Q); cam.getWorldPosition(_Pos)
-    _F.set(0, 0, -1).applyQuaternion(_Q) // camera's real forward
-    _U.set(0, 1, 0).applyQuaternion(_Q)  // camera's real up (includes any roll from CameraRig)
-    _R.set(1, 0, 0).applyQuaternion(_Q)  // camera's real right
-    _D.copy(_F).multiplyScalar(Math.cos(theta)).addScaledVector(_U, Math.sin(theta)).normalize()
-    _N.crossVectors(_R, _D).normalize()
-    if (_N.dot(_U) < 0) _N.negate()
-    const constant = -_N.dot(_Pos)
-    ROOM_CLIP[0].normal.copy(_N); ROOM_CLIP[0].constant = constant
-    ROOM_CLIP[1].normal.copy(_N).negate(); ROOM_CLIP[1].constant = -constant
+    cam.updateMatrixWorld()
+    const yNdc = 1 - 2 * SPLIT_FRACTION
+    _A.set(-1, yNdc, 0.5).unproject(cam)
+    _B.set(1, yNdc, 0.5).unproject(cam)
+    cam.getWorldPosition(_EYE)
+    const plane = ROOM_CLIP[0]
+    plane.setFromCoplanarPoints(_EYE, _A, _B)
+    _PROBE.set(0, 1, 0.5).unproject(cam) // top-center of screen: always "above" the split line, used to self-check direction
+    if (plane.distanceToPoint(_PROBE) < 0) plane.negate()
+    ROOM_CLIP[1].copy(plane).negate()
   })
   return null
 }
@@ -90,7 +91,19 @@ function Room({ i }: { i: number }) {
     a.h += ((H.i === i ? 1 : 0) - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
-    if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => { if (!mats.current.includes(m)) { m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true; if (coarse) m.clippingPlanes = [ROOM_CLIP[i]]; mats.current.push(m) } }) })
+    // Clip only the room's environment (floor/legs/platform/grass) — never the cart or tombstone model
+    // itself. The art group (the actual model) is walked past so it always stays fully visible.
+    if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
+      if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
+        if (!mats.current.includes(m)) {
+          m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true
+          let insideArt = false, p = o
+          while (p) { if (p === art.current) { insideArt = true; break } p = p.parent }
+          if (coarse && !insideArt) m.clippingPlanes = [ROOM_CLIP[i]]
+          mats.current.push(m)
+        }
+      })
+    })
     const op = Math.pow(rev, 1.4) * (1 - 0.45 * a.q) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1))
     mats.current.forEach((m) => { m.opacity = m.userData.b * op })
     cfg.lights.forEach((l, j) => { const pl = L.current[j]; if (pl) pl.intensity = l.i * Math.pow(rev, 1.2) * (1 + 0.9 * a.h * (j === 0 ? 1 : i === 1 && j === 1 ? 1.2 : 0.3)) * (1 - 0.5 * a.q) * (1 + (red ? 0 : 0.05 * Math.sin(t * 0.8 + i))) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1)) * (i === 0 ? 1 + 0.8 * Math.max(0, E.k) : 1 - 0.95 * E.dark) * (i === 0 && j === 3 ? 1 + 0.15 * a.h * Math.sin(t * 19 + Math.sin(t * 3) * 4) : 1) })
@@ -120,10 +133,6 @@ function Room({ i }: { i: number }) {
   )
 }
 
-// phone-only divider. Built as a plain DOM element appended to <body> in an effect, NOT a react-dom portal
-// inside the 3D canvas (that crashed the 3D renderer on phones and caused the stuck loading screen).
-// Its box is the same full-screen box as the canvas, and the line sits at exactly SPLIT_FRACTION of it,
-// so it matches the 3D clip and the text clip.
 function PhoneDivider() {
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
