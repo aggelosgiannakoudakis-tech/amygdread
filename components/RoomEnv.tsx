@@ -10,7 +10,6 @@ const soft = () => { const c = document.createElement('canvas'); c.width = c.hei
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
 
 // The remains of a place that was used: stained wet concrete with faded warning stripes, a puddle, hanging cables, a dead lamp-shade with a weak bulb,
 // distant columns and a beam in the dark, drifting steam, an overturned bucket, cans and a pot lid.
@@ -32,14 +31,15 @@ export function CanteenEnv() {
   useFrame(({ clock }) => { const t = clock.elapsedTime; steam.current.forEach((m, k) => { if (!m) return; const c = (t * 0.07 + k * 0.33) % 1; m.position.y = 0.9 + c * 1.5; m.scale.setScalar(0.8 + c * 1.4) }) })
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.47, 1.6]} material={o.floor}><planeGeometry args={[6.4, 10]} /></mesh>
       {coarse && (
-        // phone-only: compact platform frame — short legs + one crossbeam, ending well above the divider line
+        // phone-only: a clean, simple row of support legs + crossbeams under the platform — reads like a loading-dock frame, no clutter
         <group>
-          {[-1.2, -0.6, 0, 0.6, 1.2].map((x, i) => (
-            <mesh key={`leg${i}`} position={[x, -0.875, -0.4]} material={legMat}><cylinderGeometry args={[0.07, 0.07, 0.75, 10]} /></mesh>
+          {[-2.6, -1.3, 0, 1.3, 2.6].map((x, i) => (
+            <mesh key={`leg${i}`} position={[x, -2.5, -0.7]} material={o.steel}><cylinderGeometry args={[0.06, 0.06, 4.2, 10]} /></mesh>
           ))}
-          <mesh position={[0, -1.15, -0.4]} material={legMat}><boxGeometry args={[2.7, 0.07, 0.12]} /></mesh>
+          <mesh position={[0, -0.85, -0.7]} material={o.steel}><boxGeometry args={[6.2, 0.1, 0.14]} /></mesh>
+          <mesh position={[0, -2.3, -0.7]} material={o.steel}><boxGeometry args={[6.2, 0.08, 0.12]} /></mesh>
         </group>
       )}
       {!coarse && (
@@ -60,20 +60,12 @@ export function CanteenEnv() {
         </>
       )}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[1.4, -0.465, 1.3]} material={o.puddle}><circleGeometry args={[0.9, 32]} /></mesh>
-      {!coarse && (
-        <>
-          <mesh position={[0, 3.1, -0.5]} material={o.steel}><coneGeometry args={[0.38, 0.3, 20, 1, true]} /></mesh>
-          <mesh position={[0, 2.95, -0.5]} material={o.bulb}><sphereGeometry args={[0.07, 10, 10]} /></mesh>
-          {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) steam.current[k] = m }} position={[0.1 * k, 1 + k * 0.4, -0.2]}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={o.tex} color="#8a7a6a" opacity={0.1} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
-        </>
-      )}
+      <mesh position={[0, 3.1, -0.5]} material={o.steel}><coneGeometry args={[0.38, 0.3, 20, 1, true]} /></mesh>
+      <mesh position={[0, 2.95, -0.5]} material={o.bulb}><sphereGeometry args={[0.07, 10, 10]} /></mesh>
+      {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) steam.current[k] = m }} position={[0.1 * k, 1 + k * 0.4, -0.2]}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={o.tex} color="#8a7a6a" opacity={0.1} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
       <mesh position={[-1.6, -0.34, 1.4]} rotation={[0, 0.5, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.18, 0.15, 0.3, 16, 1, true]} /></mesh>
-      {!coarse && (
-        <>
-          {[[-1.1, 1.7], [-0.8, 1.9], [0.9, 2.1]].map(([x, z], i) => <mesh key={i} position={[x, -0.41, z]} rotation={[0, 0, i === 1 ? Math.PI / 2 : 0]} material={o.rust}><cylinderGeometry args={[0.06, 0.06, 0.1, 10]} /></mesh>)}
-          <mesh position={[1.9, -0.455, 0.2]} rotation={[0, 0.3, 0.05]} material={o.rust}><cylinderGeometry args={[0.3, 0.3, 0.02, 20]} /></mesh>
-        </>
-      )}
+      {[[-1.1, 1.7], [-0.8, 1.9], [0.9, 2.1]].map(([x, z], i) => <mesh key={i} position={[x, -0.41, z]} rotation={[0, 0, i === 1 ? Math.PI / 2 : 0]} material={o.rust}><cylinderGeometry args={[0.06, 0.06, 0.1, 10]} /></mesh>)}
+      <mesh position={[1.9, -0.455, 0.2]} rotation={[0, 0.3, 0.05]} material={o.rust}><cylinderGeometry args={[0.3, 0.3, 0.02, 20]} /></mesh>
     </group>
   )
 }
@@ -115,3 +107,13 @@ export function TombEnv() {
           {o.wroots.map((c, i) => <mesh key={`w${i}`} material={o.rt}><tubeGeometry args={[c, 20, 0.05 + (i % 3) * 0.015, 6, false]} /></mesh>)}
           {o.stones.map((q, i) => <mesh key={`s${i}`} position={q.p} scale={[q.s, q.s * 0.7, q.s * 0.8]} rotation={[i, i * 2, 0]} material={o.stone}><icosahedronGeometry args={[1, 1]} /></mesh>)}
           {o.planks.map((q, i) => <mesh key={`k${i}`} position={q.p} rotation={[0.1 * i, q.r, 0.2 - 0.3 * i]} material={o.wood}><boxGeometry args={[0.6, 0.06, 0.16]} /></mesh>)}
+        </>
+      )}
+      <primitive object={o.grass} />
+      {!coarse && o.under.map((c, i) => <mesh key={i} material={o.rt}><tubeGeometry args={[c, 28, 0.03 + (i % 3) * 0.015, 6, false]} /></mesh>)}
+      <points geometry={o.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>
+      {!coarse && o.trees.map((t, i) => <group key={i}><mesh position={[t.x, t.h / 2 - 1, t.z]} material={o.tm}><cylinderGeometry args={[0.1, 0.22, t.h, 7]} /></mesh>{t.br.map((c, k) => <mesh key={k} material={o.tm}><tubeGeometry args={[c, 12, 0.05, 5, false]} /></mesh>)}</group>)}
+      {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={o.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
+    </group>
+  )
+}
