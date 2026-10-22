@@ -26,10 +26,11 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only: how high each room's 3D group sits. First = Canteen, second = Dear Mother.
-// Dear Mother raised a little more (-1.3 -> -1.1); tombstone + sand move together.
+// phone-only: the two numbers below control how high each room's 3D model sits. First = Canteen,
+// second = Dear Mother. Dear Mother raised a bit more now that the sand platform no longer bulges
+// downward (see RoomEnv ELLIPSE fix), giving clear black space above the text as in the reference.
 const PORTRAIT_PY: [number, number] = [1.6, -1.1]
-// phone-only: text vertical offset (separate from the model offset above).
+// phone-only: text vertical offset, separate from the model's own offset above.
 const PORTRAIT_TEXT_Y = -1.1
 
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
@@ -68,25 +69,23 @@ function Room({ i }: { i: number }) {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
     const r = P.r, rev = sstep(i ? 0.4 : 0.34, i ? 0.86 : 0.78, r), t = clock.elapsedTime, a = st.current, red = P.reduced
-    a.h += ((H.i === i ? 1 : 0) - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
+    // phone has no hover/mouse concept, so the desktop "brighten on hover" target (H.i === i) never
+    // fires on touch, which was leaving text and lights permanently stuck at their dimmed/unhovered
+    // level on every phone screenshot. On coarse devices we just treat the room as always-active.
+    const hoverTarget = coarse ? 1 : (H.i === i ? 1 : 0)
+    a.h += (hoverTarget - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
     if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
-      if (!o.isMesh) return
-      let insideArt = false, noClip = false, p = o
-      while (p) {
-        if (p === art.current) insideArt = true
-        if (p.userData && p.userData.noClip) noClip = true
-        p = p.parent
-      }
-      // phone-only: hide the tombstone model's own large ground disc (radius 3.2). On phone the
-      // ground is drawn by TombEnv as an exact on-screen circle instead.
-      if (coarse && i === 1 && insideArt && o.geometry && o.geometry.type === 'CircleGeometry' && (o.geometry.parameters?.radius ?? 0) >= 2.5) o.visible = false
-      const ms: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material]
-      ms.forEach((m) => {
+      if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
         if (!mats.current.includes(m)) {
           m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true
-          // room models (cart/tombstone) and noClip-flagged meshes (Canteen pillars) are never clipped
+          let insideArt = false, noClip = false, p = o
+          while (p) {
+            if (p === art.current) insideArt = true
+            if (p.userData && p.userData.noClip) noClip = true
+            p = p.parent
+          }
           if (coarse && !insideArt && !noClip) m.clippingPlanes = [ROOM_CLIP[i]]
           mats.current.push(m)
         }
@@ -131,10 +130,9 @@ function PhoneDivider() {
       const wrap = document.createElement('div')
       wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:45;opacity:0;'
       const band = document.createElement('div')
-      // thin soft band only (was 120px tall and was covering Canteen's ENTER button and pillar bottoms)
-      band.style.cssText = `position:absolute;left:0;right:0;top:calc(${SPLIT_FRACTION * 100}% - 12px);height:24px;display:flex;align-items:center;`
+      band.style.cssText = `position:absolute;left:0;right:0;top:calc(${SPLIT_FRACTION * 100}% - 60px);height:120px;display:flex;align-items:center;`
       const mask = document.createElement('div')
-      mask.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 40%, rgba(0,0,0,0.9) 60%, rgba(0,0,0,0) 100%);'
+      mask.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.96) 62%, rgba(0,0,0,0) 100%);'
       const line = document.createElement('div')
       line.style.cssText = 'position:relative;width:100%;height:2px;background:linear-gradient(90deg, rgba(60,80,255,0.95) 0%, rgba(150,70,220,0.95) 50%, rgba(255,60,55,0.95) 100%);box-shadow:0 0 14px rgba(130,90,220,0.55);'
       band.appendChild(mask); band.appendChild(line); wrap.appendChild(band)
