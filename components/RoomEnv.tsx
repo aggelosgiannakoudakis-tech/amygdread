@@ -10,8 +10,10 @@ const soft = () => { const c = document.createElement('canvas'); c.width = c.hei
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only support platform material: MeshBasicMaterial (immune to scene lighting) + very dark brown
-const legMat = new THREE.MeshBasicMaterial({ color: '#0e0a07' })
+// phone-only support material: lighter warm dark brown, clearly distinguishable from the pure black
+// background (the previous '#140c08' was almost indistinguishable from black and likely invisible).
+// MeshBasicMaterial is unlit so this color is guaranteed stable regardless of scene lighting.
+const legMat = new THREE.MeshBasicMaterial({ color: '#4a3524' })
 
 export function CanteenEnv() {
   const steam = useRef<THREE.Mesh[]>([])
@@ -29,35 +31,26 @@ export function CanteenEnv() {
     return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; steam.current.forEach((m, k) => { if (!m) return; const c = (t * 0.07 + k * 0.33) % 1; m.position.y = 0.9 + c * 1.5; m.scale.setScalar(0.8 + c * 1.4) }) })
-
-  // phone-only: mark the entire CanteenEnv group as noClip so the clip-plane traversal
-  // in RoomWorlds.tsx sees it immediately and never clips the platform/pillars.
-  const root = useRef<THREE.Group>(null)
-  useFrame(() => {
-    if (coarse && root.current) root.current.userData.noClip = true
-  })
-
   return (
-    <group ref={root}>
+    <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
-        // phone-only: a single dark platform under the cart (matching the reference's subtle base).
-        // MeshBasicMaterial guarantees color stability; noClip on parent group prevents clipping.
+        // phone-only support deck. userData.noClip is set directly on EACH mesh (not just a wrapping
+        // group) so it's exempt from the divider clip-plane no matter how the traversal walks the
+        // tree — this removes any ambiguity from the previous attempts.
         <group>
-          <mesh position={[0, -0.55, -0.3]} material={legMat}><boxGeometry args={[3.2, 0.06, 1.0]} /></mesh>
+          <mesh userData={{ noClip: true }} position={[0, -0.55, -0.3]} material={legMat}><boxGeometry args={[3.2, 0.06, 1.0]} /></mesh>
           {[-1.4, -0.8, -0.2, 0.2, 0.8, 1.4].map((x, i) => (
-            <mesh key={`leg${i}`} position={[x, -0.95, -0.3]} material={legMat}><cylinderGeometry args={[0.05, 0.05, 0.8, 10]} /></mesh>
+            <mesh key={`leg${i}`} userData={{ noClip: true }} position={[x, -0.95, -0.3]} material={legMat}><cylinderGeometry args={[0.05, 0.05, 0.8, 10]} /></mesh>
           ))}
-          <mesh position={[0, -1.35, -0.3]} material={legMat}><boxGeometry args={[3.0, 0.06, 0.9]} /></mesh>
+          <mesh userData={{ noClip: true }} position={[0, -1.35, -0.3]} material={legMat}><boxGeometry args={[3.0, 0.06, 0.9]} /></mesh>
         </group>
       )}
       {!coarse && (
         <>
           {[[-2.2, -0.8, 0.17], [1.8, -1.4, 0.22], [-0.6, 1.6, 0.14], [2.6, 1, 0.18], [-3.1, 0.9, 0.2], [-1.4, 3.4, 0.16], [1.9, 4.4, 0.2], [-2.4, 5.2, 0.18], [0.6, 6, 0.15]].map(([x, z, r], i) => (<group key={`p${i}`}><mesh position={[x, -3.7, z]} material={o.rust}><cylinderGeometry args={[r, r, 6.4, 14]} /></mesh><mesh position={[x, -1.3, z]} material={o.steel}><cylinderGeometry args={[r * 1.6, r * 1.6, 0.12, 14]} /></mesh><mesh position={[x, -2.9, z]} material={o.steel}><cylinderGeometry args={[r * 1.5, r * 1.5, 0.1, 14]} /></mesh></group>))}
-          <mesh position={[0, -2.4, -1]} rotation={[0, 0, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 6, 12]} /></mesh>
-          <mesh position={[1.2, -3.6, 1.5]} rotation={[Math.PI / 2, 0, 0]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 12, 12]} /></mesh>
-          {[-1.8, 1.8].map((x) => <mesh key={x} position={[x, -1.2, 1.5]} material={o.steel}><boxGeometry args={[0.18, 0.5, 12]} /></mesh>)}
-          {[-3, -1, 1, 3, 5, 7].map((z) => <mesh key={z} position={[0, -1.45, z]} material={o.steel}><boxGeometry args={[4.2, 0.25, 0.2]} /></mesh>)}
+          <mesh position={[0, -2.4, -1]} rotation={[0, 0, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 6, 12]} /></mesh><mesh position={[1.2, -3.6, 1.5]} rotation={[Math.PI / 2, 0, 0]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 12, 12]} /></mesh>
+          {[-1.8, 1.8].map((x) => <mesh key={x} position={[x, -1.2, 1.5]} material={o.steel}><boxGeometry args={[0.18, 0.5, 12]} /></mesh>)}{[-3, -1, 1, 3, 5, 7].map((z) => <mesh key={z} position={[0, -1.45, z]} material={o.steel}><boxGeometry args={[4.2, 0.25, 0.2]} /></mesh>)}
           <mesh position={[0, -1.6, -0.4]} rotation={[0, 0, Math.PI / 2]} material={o.steel}><cylinderGeometry args={[0.07, 0.07, 3.6, 10]} /></mesh>
           {[-1.7, 1.7].map((x) => (<group key={x} position={[x, -1.6, -0.4]} rotation={[0, Math.PI / 2, 0]}><mesh material={o.rust}><torusGeometry args={[0.9, 0.09, 10, 36]} /></mesh>{Array.from({ length: 8 }, (_, k) => <mesh key={k} rotation={[0, 0, (k / 8) * Math.PI]} material={o.rust}><boxGeometry args={[1.8, 0.05, 0.06]} /></mesh>)}</group>))}
           {o.floorC.map((c, i) => <mesh key={`f${i}`} material={o.cable}><tubeGeometry args={[c, 30, 0.03, 6, false]} /></mesh>)}
@@ -87,7 +80,6 @@ export function CanteenEnv() {
     </group>
   )
 }
-
 export function TombEnv() {
   const fog = useRef<THREE.Mesh[]>([])
   const o = useMemo(() => {
@@ -96,7 +88,10 @@ export function TombEnv() {
     for (let i = 0; i < 420; i++) {
       const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
-      if (coarse) { const r = 0.4 + rnd(i, 2) * 2.0; x = Math.cos(an) * r; z = Math.sin(an) * r }
+      // phone: plain circular ring, no artificial z-stretch — the camera's own perspective naturally
+      // flattens this into the wide ellipse look from the reference. Radius enlarged substantially to
+      // match the bigger platform below, so grass still hugs its edge.
+      if (coarse) { const r = 0.9 + rnd(i, 2) * 2.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
       else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
@@ -111,10 +106,10 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    // phone-only: use EllipseGeometry (2.8 wide, 3.8 deep) + slight rotation to face camera,
-    // so it renders as a perfect on-screen circle touching both edges (matching reference).
-    const platform = coarse ? new THREE.EllipseGeometry(2.8, 3.8, 48) : new THREE.CircleGeometry(2.2, 48)
-    const platformMat = dark('#141009', 0, 1)
+    // phone: plain, valid CircleGeometry, no scale/stretch applied on the mesh — natural camera
+    // perspective flattens this into a wide ellipse like the reference. Radius enlarged significantly
+    // (2.4 -> 4.4) because the previous size didn't reach the screen edges.
+    const platform = new THREE.CircleGeometry(coarse ? 4.4 : 2.2, 48), platformMat = dark('#141009', 0, 1)
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
