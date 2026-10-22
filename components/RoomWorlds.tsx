@@ -26,11 +26,7 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only: the two numbers below control how high each room's 3D model sits. First = Canteen,
-// second = Dear Mother. Dear Mother raised a bit more now that the sand platform no longer bulges
-// downward (see RoomEnv ELLIPSE fix), giving clear black space above the text as in the reference.
-const PORTRAIT_PY: [number, number] = [1.6, -1.1]
-// phone-only: text vertical offset, separate from the model's own offset above.
+const PORTRAIT_PY: [number, number] = [1.6, -1.55]
 const PORTRAIT_TEXT_Y = -1.1
 
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
@@ -69,11 +65,10 @@ function Room({ i }: { i: number }) {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
     const r = P.r, rev = sstep(i ? 0.4 : 0.34, i ? 0.86 : 0.78, r), t = clock.elapsedTime, a = st.current, red = P.reduced
-    // phone has no hover/mouse concept, so the desktop "brighten on hover" target (H.i === i) never
-    // fires on touch, which was leaving text and lights permanently stuck at their dimmed/unhovered
-    // level on every phone screenshot. On coarse devices we just treat the room as always-active.
+    // phone has no hover, so force a.h = 1 (full brightness) and a.q = 0 (not quit) to match reference.
     const hoverTarget = coarse ? 1 : (H.i === i ? 1 : 0)
-    a.h += (hoverTarget - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
+    a.h = coarse ? 1 : a.h + (hoverTarget - a.h) * 0.04
+    a.q = coarse ? 0 : a.q + ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
     if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
