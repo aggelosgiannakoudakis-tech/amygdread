@@ -10,9 +10,6 @@ const soft = () => { const c = document.createElement('canvas'); c.width = c.hei
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only support material: lighter warm dark brown, clearly distinguishable from the pure black
-// background (the previous '#140c08' was almost indistinguishable from black and likely invisible).
-// MeshBasicMaterial is unlit so this color is guaranteed stable regardless of scene lighting.
 const legMat = new THREE.MeshBasicMaterial({ color: '#4a3524' })
 
 export function CanteenEnv() {
@@ -35,9 +32,6 @@ export function CanteenEnv() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
-        // phone-only support deck. userData.noClip is set directly on EACH mesh (not just a wrapping
-        // group) so it's exempt from the divider clip-plane no matter how the traversal walks the
-        // tree — this removes any ambiguity from the previous attempts.
         <group>
           <mesh userData={{ noClip: true }} position={[0, -0.55, -0.3]} material={legMat}><boxGeometry args={[3.2, 0.06, 1.0]} /></mesh>
           {[-1.4, -0.8, -0.2, 0.2, 0.8, 1.4].map((x, i) => (
@@ -88,10 +82,7 @@ export function TombEnv() {
     for (let i = 0; i < 420; i++) {
       const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
-      // phone: plain circular ring, no artificial z-stretch — the camera's own perspective naturally
-      // flattens this into the wide ellipse look from the reference. Radius enlarged substantially to
-      // match the bigger platform below, so grass still hugs its edge.
-      if (coarse) { const r = 0.9 + rnd(i, 2) * 2.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
+      if (coarse) { const r = 2 + rnd(i, 2) * 12.5; x = Math.cos(an) * r; z = Math.sin(an) * r }
       else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
@@ -106,10 +97,7 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    // phone: plain, valid CircleGeometry, no scale/stretch applied on the mesh — natural camera
-    // perspective flattens this into a wide ellipse like the reference. Radius enlarged significantly
-    // (2.4 -> 4.4) because the previous size didn't reach the screen edges.
-    const platform = new THREE.CircleGeometry(coarse ? 4.4 : 2.2, 48), platformMat = dark('#141009', 0, 1)
+    const platform = new THREE.CircleGeometry(coarse ? 16 : 2.2, 64), platformMat = dark('#141009', 0, 1)
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
