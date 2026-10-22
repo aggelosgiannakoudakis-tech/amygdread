@@ -26,15 +26,16 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only vertical anchors: Canteen height, Dear Mother height. These are the ONLY two numbers
-// that control how high each room sits on screen. Estimate — expect to need one more small nudge
-// after seeing a screenshot.
-const PORTRAIT_PY: [number, number] = [0.9, -1.55]
+// phone-only: the two numbers below control how high each room's 3D model sits. First = Canteen,
+// second = Dear Mother. Raised Canteen so its pillars clear the divider line with margin, giving the
+// elevated "overlooking" framing. Dear Mother left where it already matches the reference.
+const PORTRAIT_PY: [number, number] = [1.6, -1.55]
+// phone-only: text vertical offset, separate from the model's own offset above. The old value (-2.35)
+// was tuned for desktop's full scale; at phone's 0.55x scale it dragged text roughly a full room-height
+// too far down, which is why Canteen's text fell into Dear Mother's area and Dear Mother's text ran off
+// the bottom of the screen. This smaller offset keeps text close under its own model, inside its own half.
+const PORTRAIT_TEXT_Y = -1.1
 
-// Two clip planes recomputed every frame directly from the camera's real projection (Three.js's own
-// unproject, not hand trig), each representing "this exact row of pixels on screen" at SPLIT_FRACTION.
-// ROOM_CLIP[0] keeps only what's ABOVE that row (Canteen's floor/legs), ROOM_CLIP[1] keeps only what's
-// BELOW it (Dear Mother's ground). Direction is self-checked every frame. Phone-only. Confirmed working.
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
 
@@ -64,10 +65,8 @@ function Room({ i }: { i: number }) {
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
+  const textY = portrait ? PORTRAIT_TEXT_Y : -2.35
   const tex = useMemo(glowTexture, [])
-  // Text always portals into the one shared #room-ui container, exactly like desktop. No CSS clipping on
-  // text — that was causing text to vanish when it didn't perfectly align with the 3D split line. Only
-  // the 3D geometry needs clip planes; plain spacing (PORTRAIT_PY + the Html offset below) keeps text clear.
   const portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [i])
   useFrame(({ clock }) => {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
@@ -76,7 +75,6 @@ function Room({ i }: { i: number }) {
     a.h += ((H.i === i ? 1 : 0) - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
-    // Clip only the room's environment (floor/legs/platform/grass) — never the cart or tombstone model.
     if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
       if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
         if (!mats.current.includes(m)) {
@@ -104,7 +102,7 @@ function Room({ i }: { i: number }) {
       {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
       {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
       {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
-      <Html position={[0, -2.35, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
+      <Html position={[0, textY, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
           <p className="font-mono text-[10px] tracking-[0.5em] text-bone/60">{room.n}</p>
           <h3 className="mt-2 font-display text-[clamp(2.4rem,4.4vw,4.6rem)] font-light uppercase italic leading-[0.9] tracking-[0.02em] text-bone">{room.name}</h3>
