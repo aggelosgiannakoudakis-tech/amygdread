@@ -101,11 +101,11 @@ function Room({ i }: { i: number }) {
     <mesh ref={beacon} position={[px, py + 0.2, -31 - (coarse && i === 1 ? 2.475 : 0)]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
     <group ref={g} position={[px, py, -30]} scale={s} visible={false}>
       {/* Phone-only depth adjustment for the 3D grave and terrain. The HTML text remains outside this group. */}
-      <group position={coarse && i === 1 ? [0, 0, -4.5] : [0, 0, 0]}>
+      <group position={coarse && i === 1 ? [0, -1.2, 0] : [0, 0, 0]}>
         <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
-        {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
+        {on && <group ref={art} scale={coarse && i === 1 ? 1.3 : 1}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
         {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
-        {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
+        {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={coarse && i === 1 ? (j === 0 ? '#7140ff' : j === 1 ? '#4a26ff' : '#5630b8') : l.c} distance={12} decay={2} intensity={0} />)}
         {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
       </group>
       <Html position={[0, textY, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>

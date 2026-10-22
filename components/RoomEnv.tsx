@@ -86,10 +86,11 @@ export function TombEnv() {
       const an = coarse ? (i / grassCount) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
       if (coarse) {
-        // Keep every blade on the sand, with a little grass around and in front of the grave.
-        const r = 0.9 + rnd(i, 2) * 2.6
+        // Match the stretched phone sand disk: distribute grass around its full oval edge
+        // while keeping every blade on the sand and leaving a clear patch directly in front.
+        const r = 0.9 + rnd(i, 2) * 3.2
         x = Math.cos(an) * r
-        z = Math.sin(an) * r * 1.9 + 0.3
+        z = Math.sin(an) * r * 4.6 + 0.3
       } else {
         const r = 0.9 + rnd(i, 2) * 2.5
         x = Math.cos(an) * r * 0.9
@@ -115,34 +116,71 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    // A contained sand disk on phones. Its depth is stretched slightly so that, from the
-    // existing low camera angle, it reads like the broad circular island in the reference.
+    // Phone-only sand island: the target is a broad, textured circular patch with
+    // visible side margins, not the thin blue oval produced by the previous settings.
     const platformRadius = coarse ? 4.45 : 2.2
-    const platform = new THREE.CircleGeometry(platformRadius, coarse ? 96 : 64)
+    const platform = new THREE.CircleGeometry(platformRadius, coarse ? 128 : 64)
+    let platformMat: THREE.MeshStandardMaterial
     if (coarse) {
-      // Keep the lighting strongest near the grave and let the perimeter fall into darkness.
-      // This changes only the mobile sand surface; all existing scene lights stay untouched.
+      // Subtle granular texture so the surface reads as rough soil instead of a smooth disc.
+      const sandCanvas = document.createElement('canvas')
+      sandCanvas.width = sandCanvas.height = 512
+      const sx = sandCanvas.getContext('2d')!
+      sx.fillStyle = '#88758f'
+      sx.fillRect(0, 0, 512, 512)
+      for (let i = 0; i < 7200; i++) {
+        const x = rnd(i, 71) * 512
+        const y = rnd(i, 72) * 512
+        const light = rnd(i, 73) > 0.52
+        const alpha = 0.06 + rnd(i, 74) * 0.22
+        sx.fillStyle = light ? `rgba(210,190,220,${alpha})` : `rgba(20,12,35,${alpha})`
+        sx.fillRect(x, y, 0.5 + rnd(i, 75) * 2.2, 0.5 + rnd(i, 76) * 1.6)
+      }
+      // Low-contrast irregular patches break up the surface without making it noisy.
+      for (let i = 0; i < 45; i++) {
+        const x = rnd(i, 77) * 512
+        const y = rnd(i, 78) * 512
+        const r = 10 + rnd(i, 79) * 42
+        const patch = sx.createRadialGradient(x, y, 0, x, y, r)
+        patch.addColorStop(0, `rgba(185,145,205,${0.025 + rnd(i, 80) * 0.045})`)
+        patch.addColorStop(1, 'rgba(70,45,95,0)')
+        sx.fillStyle = patch
+        sx.fillRect(x - r, y - r, r * 2, r * 2)
+      }
+      const sandTexture = new THREE.CanvasTexture(sandCanvas)
+      sandTexture.colorSpace = THREE.SRGBColorSpace
+      sandTexture.wrapS = sandTexture.wrapT = THREE.ClampToEdgeWrapping
+      sandTexture.needsUpdate = true
       const positions = platform.attributes.position
       const colors = new Float32Array(positions.count * 3)
       for (let i = 0; i < positions.count; i++) {
         const radial = Math.min(1, Math.hypot(positions.getX(i), positions.getY(i)) / platformRadius)
-        const shade = 1 - 0.8 * radial
+        // Bright purple around the grave, fading to near-black at the rim.
+        const shade = 1 - 0.72 * Math.pow(radial, 1.35)
         colors[i * 3] = shade
         colors[i * 3 + 1] = shade
         colors[i * 3 + 2] = shade
       }
       platform.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+      platformMat = new THREE.MeshStandardMaterial({
+        color: '#d0b8e8',
+        map: sandTexture,
+        bumpMap: sandTexture,
+        bumpScale: 0.075,
+        roughness: 1,
+        metalness: 0,
+        vertexColors: true,
+      })
+    } else {
+      platformMat = dark('#141009', 0, 1)
     }
-    const platformMat = dark('#141009', 0, 1)
-    platformMat.vertexColors = coarse
-    platformMat.needsUpdate = true
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} scale={[1, 1.9, 1]} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} scale={[1, coarse ? 5.0 : 1, 1]} />
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
