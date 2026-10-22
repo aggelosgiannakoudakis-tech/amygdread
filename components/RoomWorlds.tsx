@@ -27,9 +27,9 @@ function ModelSlot({ url }: { url: string }) {
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 // phone-only: the two numbers below control how high each room's 3D model sits. First = Canteen,
-// second = Dear Mother. Raised Canteen so its pillars clear the divider line with margin, giving the
-// elevated "overlooking" framing. Dear Mother left where it already matches the reference.
-const PORTRAIT_PY: [number, number] = [1.6, -1.55]
+// second = Dear Mother. Dear Mother raised slightly (-1.55 -> -1.3) per user request so the
+// tombstone+sand composition sits a little higher on screen.
+const PORTRAIT_PY: [number, number] = [1.6, -1.3]
 // phone-only: text vertical offset, separate from the model's own offset above. The old value (-2.35)
 // was tuned for desktop's full scale; at phone's 0.55x scale it dragged text roughly a full room-height
 // too far down, which is why Canteen's text fell into Dear Mother's area and Dear Mother's text ran off
@@ -79,9 +79,16 @@ function Room({ i }: { i: number }) {
       if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
         if (!mats.current.includes(m)) {
           m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true
-          let insideArt = false, p = o
-          while (p) { if (p === art.current) { insideArt = true; break } p = p.parent }
-          if (coarse && !insideArt) m.clippingPlanes = [ROOM_CLIP[i]]
+          let insideArt = false, noClip = false, p = o
+          while (p) {
+            if (p === art.current) insideArt = true
+            if (p.userData && p.userData.noClip) noClip = true
+            p = p.parent
+          }
+          // meshes inside the actual room model (cart/tombstone) or explicitly flagged noClip
+          // (e.g. Canteen's support pillars) are never clip-planed, regardless of their exact
+          // height — only generic environment geometry (floor, sand, grass) gets clipped.
+          if (coarse && !insideArt && !noClip) m.clippingPlanes = [ROOM_CLIP[i]]
           mats.current.push(m)
         }
       })

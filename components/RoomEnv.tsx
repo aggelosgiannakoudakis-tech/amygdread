@@ -11,6 +11,11 @@ const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
+// phone-only: the sand platform is a flat disc viewed from an angled camera, which always makes a
+// true circle look like a squashed ellipse on screen (unavoidable perspective foreshortening).
+// We pre-stretch the geometry along the camera's depth axis so it reads as round after that
+// foreshortening. Value is an estimate from the live screenshot's visible squash ratio.
+const ELLIPSE_Z = 1.8
 
 export function CanteenEnv() {
   const steam = useRef<THREE.Mesh[]>([])
@@ -33,8 +38,10 @@ export function CanteenEnv() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
         // phone-only: wider, taller column set so the cart reads as resting on a visible supported
-        // platform (matching the reference), ending well above the divider line.
-        <group>
+        // platform (matching the reference). Marked noClip so the per-pixel divider clip plane (used
+        // only on generic environment meshes like floor/sand) never hides these, regardless of exact
+        // height — pillars are decorative support structure that belongs entirely to Canteen.
+        <group userData={{ noClip: true }}>
           {[-1.6, -1.1, -0.6, -0.2, 0.2, 0.6, 1.1, 1.6].map((x, i) => (
             <mesh key={`leg${i}`} position={[x, -1.3, -0.4]} material={legMat}><cylinderGeometry args={[0.055, 0.055, 1.7, 10]} /></mesh>
           ))}
@@ -86,7 +93,9 @@ export function TombEnv() {
       // circle instead of randomly clumped. desktop: unchanged original random distribution.
       const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
-      if (coarse) { const r = 0.55 + rnd(i, 2) * 1.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
+      // phone: z is stretched by ELLIPSE_Z to match the pre-stretched platform geometry below, so the
+      // grass ring still hugs the edge of the (now elliptical-in-world-space) sand disc.
+      if (coarse) { const r = 0.55 + rnd(i, 2) * 1.9; x = Math.cos(an) * r; z = Math.sin(an) * r * ELLIPSE_Z }
       else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
@@ -108,7 +117,7 @@ export function TombEnv() {
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} scale={[1, ELLIPSE_Z, 1]} geometry={o.platform} material={o.platformMat} />
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
