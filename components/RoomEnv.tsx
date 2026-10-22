@@ -80,7 +80,7 @@ export function TombEnv() {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     // Phone grass is a sparse ring contained inside the circular sand.
     // Desktop grass placement and count remain unchanged.
-    const grassCount = coarse ? 160 : 420
+    const grassCount = coarse ? 190 : 420
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), grassCount), d = new THREE.Object3D()
     for (let i = 0; i < grassCount; i++) {
       const an = coarse ? (i / grassCount) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
@@ -88,15 +88,15 @@ export function TombEnv() {
       if (coarse) {
         // Match the stretched phone sand disk: distribute grass around its full oval edge
         // while keeping every blade on the sand and leaving a clear patch directly in front.
-        const r = 0.9 + rnd(i, 2) * 3.2
-        x = Math.cos(an) * r
-        z = Math.sin(an) * r * 4.6 + 0.3
+        const r = 1.0 + rnd(i, 2) * 1.75
+        x = Math.cos(an) * r * 0.9
+        z = Math.sin(an) * r * 0.9 + 0.15
       } else {
         const r = 0.9 + rnd(i, 2) * 2.5
         x = Math.cos(an) * r * 0.9
         z = Math.sin(an) * r * 2 + 0.3
       }
-      const clearFrontCenter = coarse && z > 1.45 && Math.abs(x) < 0.42
+      const clearFrontCenter = coarse && z > 1.35 && Math.abs(x) < 0.55
       const height = coarse ? 0.18 + rnd(i, 6) * 0.36 : 0.5 + rnd(i, 6) * 0.9
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z)
       d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)
@@ -118,7 +118,7 @@ export function TombEnv() {
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
     // Phone-only sand island: the target is a broad, textured circular patch with
     // visible side margins, not the thin blue oval produced by the previous settings.
-    const platformRadius = coarse ? 4.45 : 2.2
+    const platformRadius = coarse ? 3.05 : 2.2
     const platform = new THREE.CircleGeometry(platformRadius, coarse ? 128 : 64)
     let platformMat: THREE.MeshStandardMaterial
     if (coarse) {
@@ -126,7 +126,7 @@ export function TombEnv() {
       const sandCanvas = document.createElement('canvas')
       sandCanvas.width = sandCanvas.height = 512
       const sx = sandCanvas.getContext('2d')!
-      sx.fillStyle = '#88758f'
+      sx.fillStyle = '#403b78'
       sx.fillRect(0, 0, 512, 512)
       for (let i = 0; i < 7200; i++) {
         const x = rnd(i, 71) * 512
@@ -163,7 +163,7 @@ export function TombEnv() {
       }
       platform.setAttribute('color', new THREE.BufferAttribute(colors, 3))
       platformMat = new THREE.MeshStandardMaterial({
-        color: '#d0b8e8',
+        color: '#655da8',
         map: sandTexture,
         bumpMap: sandTexture,
         bumpScale: 0.075,
