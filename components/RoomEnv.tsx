@@ -1,3 +1,35 @@
+'use client'
+import { useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
+import { bake, fbm, rnd } from '../lib/procTex'
+import { sstep as sm } from '../lib/math'
+import { H } from '../lib/progress'
+
+const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
+const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
+const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
+const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
+const legMat = new THREE.MeshBasicMaterial({ color: '#4a3524' })
+
+export function CanteenEnv() {
+  const steam = useRef<THREE.Mesh[]>([])
+  const o = useMemo(() => {
+    const fl = bake(512, 512, (u, v) => { const a = fbm(u * 6, v * 6, 1), b = fbm(u * 30, v * 30, 2, 3), wet = sm(0.55, 0.68, fbm(u * 3, v * 3, 7)), st = sm(0.55, 0.8, fbm(u * 5, v * 9, 4)), g = (0.15 + 0.08 * a + 0.04 * b) * (1 - 0.45 * wet); return [g + 0.06 * st, g + 0.02 * st, g * 0.95, wet ? 0.12 : 0.85, 0, 0.5 + b * 0.3] },
+      (ctx, w) => { if (w === 'map') { for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? 'rgba(150,120,30,.4)' : 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.moveTo(60 + i * 24, 400); ctx.lineTo(84 + i * 24, 400); ctx.lineTo(44 + i * 24, 470); ctx.lineTo(20 + i * 24, 470); ctx.fill() } ctx.globalCompositeOperation = 'destination-out' ; ctx.globalCompositeOperation = 'source-over' } for (let i = 0; i < 7; i++) { ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.2; ctx.beginPath(); let x = rnd(i, 1) * 512, y = rnd(i, 2) * 512; ctx.moveTo(x, y); for (let j = 0; j < 10; j++) { x += (rnd(i * 9 + j, 3) - 0.5) * 60; y += (rnd(i * 9 + j, 4) - 0.5) * 60; ctx.lineTo(x, y) } ctx.stroke() } })
+    ;[fl.map, fl.orm, fl.bump].forEach((t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2) })
+    const gc = document.createElement('canvas'); gc.width = gc.height = 512; const gx = gc.getContext('2d')!; gx.fillStyle = '#000'; gx.fillRect(0, 0, 512, 512); gx.fillStyle = '#fff'
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) { gx.fillRect(i * 32, j * 32, 32, 5); gx.fillRect(i * 32, j * 32, 5, 32) }
+    let rg = gx.createRadialGradient(256, 174, 20, 256, 174, 130); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 512, 512)
+    gx.globalCompositeOperation = 'destination-in'
+    let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
+    lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
+    const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
+    return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
+  }, [])
+  useFrame(({ clock }) => { const t = clock.elapsedTime; steam.current.forEach((m, k) => { if (!m) return; const c = (t * 0.07 + k * 0.33) % 1; m.position.y = 0.9 + c * 1.5; m.scale.setScalar(0.8 + c * 1.4) }) })
+  return (
+    <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
         <group>
