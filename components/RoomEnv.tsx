@@ -80,16 +80,16 @@ export function TombEnv() {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     // Phone grass is a sparse ring contained inside the circular sand.
     // Desktop grass placement and count remain unchanged.
-    const grassCount = coarse ? 135 : 420
+    const grassCount = coarse ? 160 : 420
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), grassCount), d = new THREE.Object3D()
     for (let i = 0; i < grassCount; i++) {
       const an = coarse ? (i / grassCount) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
       if (coarse) {
         // Keep every blade on the sand, with a little grass around and in front of the grave.
-        const r = 0.85 + rnd(i, 2) * 1.5
+        const r = 0.9 + rnd(i, 2) * 2.6
         x = Math.cos(an) * r
-        z = Math.sin(an) * r + 0.3
+        z = Math.sin(an) * r * 1.9 + 0.3
       } else {
         const r = 0.9 + rnd(i, 2) * 2.5
         x = Math.cos(an) * r * 0.9
@@ -115,14 +115,34 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    const platform = new THREE.CircleGeometry(coarse ? 3.2 : 2.2, 64), platformMat = dark('#141009', 0, 1)
+    // A contained sand disk on phones. Its depth is stretched slightly so that, from the
+    // existing low camera angle, it reads like the broad circular island in the reference.
+    const platformRadius = coarse ? 4.45 : 2.2
+    const platform = new THREE.CircleGeometry(platformRadius, coarse ? 96 : 64)
+    if (coarse) {
+      // Keep the lighting strongest near the grave and let the perimeter fall into darkness.
+      // This changes only the mobile sand surface; all existing scene lights stay untouched.
+      const positions = platform.attributes.position
+      const colors = new Float32Array(positions.count * 3)
+      for (let i = 0; i < positions.count; i++) {
+        const radial = Math.min(1, Math.hypot(positions.getX(i), positions.getY(i)) / platformRadius)
+        const shade = 1 - 0.8 * radial
+        colors[i * 3] = shade
+        colors[i * 3 + 1] = shade
+        colors[i * 3 + 2] = shade
+      }
+      platform.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    }
+    const platformMat = dark('#141009', 0, 1)
+    platformMat.vertexColors = coarse
+    platformMat.needsUpdate = true
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} scale={[1, 1.9, 1]} />
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />

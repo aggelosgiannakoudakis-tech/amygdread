@@ -74,7 +74,7 @@ function Room({ i }: { i: number }) {
     a.q = coarse ? 0 : a.q + ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
-    if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
+    if (!mats.current.length && gr.children.length > 0) gr.traverse((o: any) => {
       if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
         if (!mats.current.includes(m)) {
           m.userData.b = m.opacity; m.transparent = true; m.needsUpdate = true
@@ -92,19 +92,22 @@ function Room({ i }: { i: number }) {
     const op = Math.pow(rev, 1.4) * (1 - 0.45 * a.q) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1))
     mats.current.forEach((m) => { m.opacity = m.userData.b * op })
     cfg.lights.forEach((l, j) => { const pl = L.current[j]; if (pl) pl.intensity = l.i * Math.pow(rev, 1.2) * (1 + 0.9 * a.h * (j === 0 ? 1 : i === 1 && j === 1 ? 1.2 : 0.3)) * (1 - 0.5 * a.q) * (1 + (red ? 0 : 0.05 * Math.sin(t * 0.8 + i))) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1)) * (i === 0 ? 1 + 0.8 * Math.max(0, E.k) : 1 - 0.95 * E.dark) * (i === 0 && j === 3 ? 1 + 0.15 * a.h * Math.sin(t * 19 + Math.sin(t * 3) * 4) : 1) })
-    gr.position.set(px, py, -30 + a.h - a.q * 0.8 - (coarse && i === 1 ? 10 : 0))
+    gr.position.set(px, py, -30 + a.h - a.q * 0.8 - (coarse && i === 1 ? 6 : 0))
     if (art.current) { art.current.rotation.y = 0; art.current.rotation.x = 0; art.current.position.y = red ? 0 : Math.sin(t * 0.4 + i) * 0.02 }
-    if (txt.current) { txt.current.style.opacity = String(sstep(0.85, 0.97, r) * (0.5 + 0.5 * a.h) * (1 - 0.4 * a.q) * (1 - E.quiet)); txt.current.style.transform = `translateY(${(1 - a.h) * 4 + (coarse && i === 1 ? 18 : 0)}px)` }
+    if (txt.current) { txt.current.style.opacity = String(sstep(0.85, 0.97, r) * (0.5 + 0.5 * a.h) * (1 - 0.4 * a.q) * (1 - E.quiet)); txt.current.style.transform = `translateY(${(1 - a.h) * 4}px)` }
   })
   return (
     <>
-    <mesh ref={beacon} position={[px, py + 0.2, -31]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
+    <mesh ref={beacon} position={[px, py + 0.2, -31 - (coarse && i === 1 ? 2.475 : 0)]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
     <group ref={g} position={[px, py, -30]} scale={s} visible={false}>
-      <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
-      {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
-      {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
-      {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
-      {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
+      {/* Phone-only depth adjustment for the 3D grave and terrain. The HTML text remains outside this group. */}
+      <group position={coarse && i === 1 ? [0, 0, -4.5] : [0, 0, 0]}>
+        <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
+        {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
+        {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
+        {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
+        {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
+      </group>
       <Html position={[0, textY, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
           <p className="font-mono text-[10px] tracking-[0.5em] text-bone/60">{room.n}</p>
