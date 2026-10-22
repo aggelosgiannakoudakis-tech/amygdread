@@ -75,7 +75,7 @@ export function CanteenEnv() {
   )
 }
 
-const _PLW = new THREE.Vector3(), _DIR = new THREE.Vector3(), _TO = new THREE.Vector3()
+const _T_CENTER = new THREE.Vector3(), _T_CAMPOS = new THREE.Vector3(), _T_CAMFWD = new THREE.Vector3(), _T_NEARDIR = new THREE.Vector3(), _T_RIGHTDIR = new THREE.Vector3(), _T_PT = new THREE.Vector3(), _T_PARENTSCALE = new THREE.Vector3()
 
 export function TombEnv() {
   const fog = useRef<THREE.Mesh[]>([])
@@ -111,20 +111,35 @@ export function TombEnv() {
     o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
     fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
     if (coarse && platformRef.current) {
-      const cam = camera as THREE.PerspectiveCamera
-      platformRef.current.getWorldPosition(_PLW)
-      cam.getWorldPosition(_TO)
-      cam.getWorldDirection(_DIR)
-      const toTarget = _PLW.clone().sub(_TO)
-      const dist = toTarget.dot(_DIR)
-      if (dist > 0.01) {
-        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))
-        const halfW = halfH * cam.aspect
-        const targetRadius = halfW * 0.82
-        const factor = Math.max(0.1, targetRadius / 2.2)
-        platformRef.current.scale.setScalar(factor)
-        if (grassRef.current) grassRef.current.scale.set(factor, 1, factor)
+      const cam = camera as THREE.Camera
+      cam.updateMatrixWorld()
+      platformRef.current.getWorldPosition(_T_CENTER)
+      cam.getWorldPosition(_T_CAMPOS)
+      cam.getWorldDirection(_T_CAMFWD)
+      let fx = _T_CAMFWD.x, fz = _T_CAMFWD.z
+      const flen = Math.hypot(fx, fz)
+      if (flen < 1e-5) { fx = 0; fz = -1 } else { fx /= flen; fz /= flen }
+      _T_NEARDIR.set(-fx, 0, -fz)
+      _T_RIGHTDIR.set(-fz, 0, fx)
+      const proj = (dir: THREE.Vector3, r: number) => { _T_PT.copy(_T_CENTER).addScaledVector(dir, r); _T_PT.project(cam); return _T_PT }
+      const NEAR_Y_LIMIT = -0.78
+      const WIDTH_X_LIMIT = 0.92
+      let lo = 0, hi = 40
+      for (let iter = 0; iter < 22; iter++) {
+        const mid = (lo + hi) / 2
+        const nearY = proj(_T_NEARDIR, mid).y
+        const rightX = proj(_T_RIGHTDIR, mid).x
+        const leftX = proj(_T_RIGHTDIR, -mid).x
+        const ok = nearY > NEAR_Y_LIMIT && Math.abs(rightX) < WIDTH_X_LIMIT && Math.abs(leftX) < WIDTH_X_LIMIT
+        if (ok) lo = mid; else hi = mid
       }
+      const worldRadius = lo
+      const parent = platformRef.current.parent
+      let parentScaleX = 1
+      if (parent) { parent.getWorldScale(_T_PARENTSCALE); parentScaleX = _T_PARENTSCALE.x || 1 }
+      const factor = Math.max(0.1, worldRadius / (2.2 * parentScaleX))
+      platformRef.current.scale.setScalar(factor)
+      if (grassRef.current) grassRef.current.scale.set(factor, 1, factor)
     }
   })
   return (
