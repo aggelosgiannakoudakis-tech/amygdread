@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { bake, fbm, rnd } from '../lib/procTex'
 import { sstep as sm } from '../lib/math'
@@ -74,15 +74,21 @@ export function CanteenEnv() {
     </group>
   )
 }
+
+const _PLW = new THREE.Vector3(), _DIR = new THREE.Vector3(), _TO = new THREE.Vector3()
+
 export function TombEnv() {
   const fog = useRef<THREE.Mesh[]>([])
+  const platformRef = useRef<THREE.Mesh>(null)
+  const grassRef = useRef<THREE.Object3D>(null)
+  const { camera } = useThree()
   const o = useMemo(() => {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) {
       const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
-      if (coarse) { const r = 2 + rnd(i, 2) * 12.5; x = Math.cos(an) * r; z = Math.sin(an) * r }
+      if (coarse) { const r = 0.9 + rnd(i, 2) * 2.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
       else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
@@ -97,24 +103,47 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    const platform = new THREE.CircleGeometry(coarse ? 16 : 2.2, 64), platformMat = dark('#141009', 0, 1)
+    const platform = new THREE.CircleGeometry(2.2, 48), platformMat = dark('#141009', 0, 1)
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
-  useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
+    fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
+    if (coarse && platformRef.current) {
+      const cam = camera as THREE.PerspectiveCamera
+      platformRef.current.getWorldPosition(_PLW)
+      cam.getWorldPosition(_TO)
+      cam.getWorldDirection(_DIR)
+      const toTarget = _PLW.clone().sub(_TO)
+      const dist = toTarget.dot(_DIR)
+      if (dist > 0.01) {
+        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))
+        const halfW = halfH * cam.aspect
+        const targetRadius = halfW * 0.82
+        const factor = Math.max(0.1, targetRadius / 2.2)
+        platformRef.current.scale.setScalar(factor)
+        if (grassRef.current) grassRef.current.scale.set(factor, 1, factor)
+      }
+    }
+  })
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+        <>
+          <mesh ref={platformRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+          <primitive object={o.grass} ref={grassRef} />
+        </>
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
           {o.wroots.map((c, i) => <mesh key={`w${i}`} material={o.rt}><tubeGeometry args={[c, 20, 0.05 + (i % 3) * 0.015, 6, false]} /></mesh>)}
           {o.stones.map((q, i) => <mesh key={`s${i}`} position={q.p} scale={[q.s, q.s * 0.7, q.s * 0.8]} rotation={[i, i * 2, 0]} material={o.stone}><icosahedronGeometry args={[1, 1]} /></mesh>)}
           {o.planks.map((q, i) => <mesh key={`k${i}`} position={q.p} rotation={[0.1 * i, q.r, 0.2 - 0.3 * i]} material={o.wood}><boxGeometry args={[0.6, 0.06, 0.16]} /></mesh>)}
+          <primitive object={o.grass} />
         </>
       )}
       <instancedMesh args={[undefined as any, undefined as any, 420]} ref={() => {}} visible={false} />
-      <primitive object={o.grass} />
     </group>
   )
 }
