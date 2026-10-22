@@ -30,7 +30,7 @@ const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').m
 // slightly so the tombstone sits in the upper part of its panel, and put its
 // complete text stack below the stone instead of on top of it.
 const PORTRAIT_PY: [number, number] = [1.6, -1.0]
-const PORTRAIT_TEXT_Y: [number, number] = [-1.1, -0.4]
+const PORTRAIT_TEXT_Y: [number, number] = [-1.4, -1.0]
 
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
