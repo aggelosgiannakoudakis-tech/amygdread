@@ -8,6 +8,9 @@ import { H } from '../lib/progress'
 import { useFrame } from '@react-three/fiber'
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t
+const coarse =
+  typeof window !== 'undefined' &&
+  matchMedia('(pointer:coarse)').matches
 const LEAF = ['#2a3a1c', '#3a4a22', '#4a3b1c', '#33261a'], mound = (x: number, z: number) => 0.32 * Math.exp(-(x * x + z * z) / 1.8)
 // MOTHER — a heavy, leaning, partly buried grave marker: dense displaced slab (irregular edges, broken corner), weathering maps with the lettering carved into colour + bump (eroded, moss over some letters), earth mound, roots, vines and leaves as real geometry.
 export default function Tombstone() {
@@ -68,7 +71,13 @@ export default function Tombstone() {
     <group position={[0, 0.1, 0]} rotation={[0.02, 0.14, 0.05]}>
       <mesh geometry={o.geo} material={o.mat} />
       <object3D ref={(a) => { E.anchors[1] = a }} position={[0, 0.1, 0.2]} />
-      <mesh geometry={o.ground} material={o.gmat} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.95, 0.3]} scale={[0.9, 2.3, 1]} />
+      <mesh
+  geometry={o.ground}
+  material={o.gmat}
+  rotation={[-Math.PI / 2, 0, 0]}
+  position={[0, -0.95, 0.3]}
+  scale={coarse ? [0.9, 0.9, 1] : [0.9, 2.3, 1]}
+/>
       {o.vines.map((c, i) => <mesh key={i} material={o.vm}><tubeGeometry args={[c, 40, 0.018 + i * 0.004, 6, false]} /></mesh>)}
       {o.roots.map((c, i) => <mesh key={i} material={o.soil}><tubeGeometry args={[c, 30, 0.045, 7, false]} /></mesh>)}
       <primitive object={o.vineLeaves} /><primitive object={o.litter} />
