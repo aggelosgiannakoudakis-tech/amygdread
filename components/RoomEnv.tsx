@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { bake, fbm, rnd } from '../lib/procTex'
 import { sstep as sm } from '../lib/math'
@@ -74,37 +74,24 @@ export function CanteenEnv() {
     </group>
   )
 }
+
+const _PLW = new THREE.Vector3(), _DIR = new THREE.Vector3(), _TO = new THREE.Vector3()
+
 export function TombEnv() {
   const fog = useRef<THREE.Mesh[]>([])
+  const platformRef = useRef<THREE.Mesh>(null)
+  const grassRef = useRef<THREE.Object3D>(null)
+  const { camera } = useThree()
   const o = useMemo(() => {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
-    // Phone grass is a sparse ring contained inside the circular sand.
-    // Desktop grass placement and count remain unchanged.
-    const grassCount = coarse ? 190 : 420
-    const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), grassCount), d = new THREE.Object3D()
-    for (let i = 0; i < grassCount; i++) {
-      const an = coarse ? (i / grassCount) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
+    const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
+    for (let i = 0; i < 420; i++) {
+      const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
       let x: number, z: number
-      if (coarse) {
-        // Match the stretched phone sand disk: distribute grass around its full oval edge
-        // while keeping every blade on the sand and leaving a clear patch directly in front.
-        const r = 1.0 + rnd(i, 2) * 1.75
-        x = Math.cos(an) * r * 0.9
-        z = Math.sin(an) * r * 0.9 + 0.15
-      } else {
-        const r = 0.9 + rnd(i, 2) * 2.5
-        x = Math.cos(an) * r * 0.9
-        z = Math.sin(an) * r * 2 + 0.3
-      }
-      const clearFrontCenter = coarse && z > 1.35 && Math.abs(x) < 0.55
-      const height = coarse ? 0.18 + rnd(i, 6) * 0.36 : 0.5 + rnd(i, 6) * 0.9
-      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z)
-      d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)
-      d.scale.set(clearFrontCenter ? 0 : 1, clearFrontCenter ? 0 : height, clearFrontCenter ? 0 : 1)
-      d.updateMatrix()
-      grass.setMatrixAt(i, d.matrix)
+      if (coarse) { const r = 0.9 + rnd(i, 2) * 2.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
+      else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
+      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
-    grass.instanceMatrix.needsUpdate = true
     const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
     const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
     const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
@@ -116,81 +103,47 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    // Phone-only sand island: the target is a broad, textured circular patch with
-    // visible side margins, not the thin blue oval produced by the previous settings.
-    const platformRadius = coarse ? 3.05 : 2.2
-    const platform = new THREE.CircleGeometry(platformRadius, coarse ? 128 : 64)
-    let platformMat: THREE.MeshStandardMaterial
-    if (coarse) {
-      // Subtle granular texture so the surface reads as rough soil instead of a smooth disc.
-      const sandCanvas = document.createElement('canvas')
-      sandCanvas.width = sandCanvas.height = 512
-      const sx = sandCanvas.getContext('2d')!
-      sx.fillStyle = '#403b78'
-      sx.fillRect(0, 0, 512, 512)
-      for (let i = 0; i < 7200; i++) {
-        const x = rnd(i, 71) * 512
-        const y = rnd(i, 72) * 512
-        const light = rnd(i, 73) > 0.52
-        const alpha = 0.06 + rnd(i, 74) * 0.22
-        sx.fillStyle = light ? `rgba(210,190,220,${alpha})` : `rgba(20,12,35,${alpha})`
-        sx.fillRect(x, y, 0.5 + rnd(i, 75) * 2.2, 0.5 + rnd(i, 76) * 1.6)
-      }
-      // Low-contrast irregular patches break up the surface without making it noisy.
-      for (let i = 0; i < 45; i++) {
-        const x = rnd(i, 77) * 512
-        const y = rnd(i, 78) * 512
-        const r = 10 + rnd(i, 79) * 42
-        const patch = sx.createRadialGradient(x, y, 0, x, y, r)
-        patch.addColorStop(0, `rgba(185,145,205,${0.025 + rnd(i, 80) * 0.045})`)
-        patch.addColorStop(1, 'rgba(70,45,95,0)')
-        sx.fillStyle = patch
-        sx.fillRect(x - r, y - r, r * 2, r * 2)
-      }
-      const sandTexture = new THREE.CanvasTexture(sandCanvas)
-      sandTexture.colorSpace = THREE.SRGBColorSpace
-      sandTexture.wrapS = sandTexture.wrapT = THREE.ClampToEdgeWrapping
-      sandTexture.needsUpdate = true
-      const positions = platform.attributes.position
-      const colors = new Float32Array(positions.count * 3)
-      for (let i = 0; i < positions.count; i++) {
-        const radial = Math.min(1, Math.hypot(positions.getX(i), positions.getY(i)) / platformRadius)
-        // Bright purple around the grave, fading to near-black at the rim.
-        const shade = 1 - 0.72 * Math.pow(radial, 1.35)
-        colors[i * 3] = shade
-        colors[i * 3 + 1] = shade
-        colors[i * 3 + 2] = shade
-      }
-      platform.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-      platformMat = new THREE.MeshStandardMaterial({
-        color: '#655da8',
-        map: sandTexture,
-        bumpMap: sandTexture,
-        bumpScale: 0.075,
-        roughness: 1,
-        metalness: 0,
-        vertexColors: true,
-      })
-    } else {
-      platformMat = dark('#141009', 0, 1)
-    }
+    const platform = new THREE.CircleGeometry(2.2, 48), platformMat = dark('#141009', 0, 1)
     return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
-  useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
+    fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
+    if (coarse && platformRef.current) {
+      const cam = camera as THREE.PerspectiveCamera
+      platformRef.current.getWorldPosition(_PLW)
+      cam.getWorldPosition(_TO)
+      cam.getWorldDirection(_DIR)
+      const toTarget = _PLW.clone().sub(_TO)
+      const dist = toTarget.dot(_DIR)
+      if (dist > 0.01) {
+        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))
+        const halfW = halfH * cam.aspect
+        const targetRadius = halfW * 0.82
+        const factor = Math.max(0.1, targetRadius / 2.2)
+        platformRef.current.scale.setScalar(factor)
+        if (grassRef.current) grassRef.current.scale.set(factor, 1, factor)
+      }
+    }
+  })
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} scale={[1, coarse ? 5.0 : 1, 1]} />
+        <>
+          <mesh ref={platformRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+          <primitive object={o.grass} ref={grassRef} />
+        </>
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
           {o.wroots.map((c, i) => <mesh key={`w${i}`} material={o.rt}><tubeGeometry args={[c, 20, 0.05 + (i % 3) * 0.015, 6, false]} /></mesh>)}
           {o.stones.map((q, i) => <mesh key={`s${i}`} position={q.p} scale={[q.s, q.s * 0.7, q.s * 0.8]} rotation={[i, i * 2, 0]} material={o.stone}><icosahedronGeometry args={[1, 1]} /></mesh>)}
           {o.planks.map((q, i) => <mesh key={`k${i}`} position={q.p} rotation={[0.1 * i, q.r, 0.2 - 0.3 * i]} material={o.wood}><boxGeometry args={[0.6, 0.06, 0.16]} /></mesh>)}
+          <primitive object={o.grass} />
         </>
       )}
       <instancedMesh args={[undefined as any, undefined as any, 420]} ref={() => {}} visible={false} />
-      <primitive object={o.grass} />
     </group>
   )
 }
