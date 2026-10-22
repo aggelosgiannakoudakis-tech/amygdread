@@ -1,33 +1,4 @@
-'use client'
-import { useMemo, useRef, useState } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
-import { Html, useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
-import { P, H } from '../lib/progress'
-import { sstep } from '../lib/math'
-import { rooms } from '../lib/content'
-import { E, enterRoom } from '../lib/enter'
-import { SPLIT_FRACTION } from '../lib/roomSplit'
-import Canteen from './Canteen'
-import Tombstone from './Tombstone'
-import { CanteenEnv, TombEnv } from './RoomEnv'
-
-const CFG = [
-  { beacon: '#c4642a', glow: '#6a2410', lights: [{ c: '#ff8a4a', p: [1.6, 1.2, 2.2], i: 70 }, { c: '#ff3a2a', p: [-1, 0.5, -2.2], i: 40 }, { c: '#7a6a58', p: [-2.5, 1, 2], i: 8 }, { c: '#ffb070', p: [0, 3.1, -0.4], i: 22 }, { c: '#ff7a3a', p: [0, -1.6, 0.3], i: 14 }, { c: '#ff8a4a', p: [0, -0.2, 3.5], i: 12 }] },
-  { beacon: '#2a3a7a', glow: '#0a1430', lights: [{ c: '#2a3aff', p: [-2.2, 1.6, 1.8], i: 70 }, { c: '#1a1aff', p: [1, 0.4, -2.2], i: 40 }, { c: '#2a4a8a', p: [0, -0.8, 2], i: 8 }, { c: '#1a2a6a', p: [0, -1.4, 2.4], i: 22 }, { c: '#2a3a8a', p: [0, -0.4, 3.5], i: 14 }] },
-]
-function glowTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d')!
-  const g = x.createRadialGradient(128, 128, 0, 128, 128, 128); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,.3)'); g.addColorStop(1, 'rgba(255,255,255,0)')
-  x.fillStyle = g; x.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c)
-}
-function ModelSlot({ url }: { url: string }) {
-  const { scene } = useGLTF(url), box = new THREE.Box3().setFromObject(scene), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), k = 3 / Math.max(sz.x, sz.y, sz.z)
-  return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
-}
-const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-const PORTRAIT_PY: [number, number] = [1.6, -1.55]
-const PORTRAIT_TEXT_Y = -1.1
+const PORTRAIT_TEXT_Y: [number, number] = [-1.1, -4.2]
 
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
@@ -58,7 +29,7 @@ function Room({ i }: { i: number }) {
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
-  const textY = portrait ? PORTRAIT_TEXT_Y : -2.35
+  const textY = portrait ? PORTRAIT_TEXT_Y[i] : -2.35
   const tex = useMemo(glowTexture, [])
   const portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [i])
   useFrame(({ clock }) => {
