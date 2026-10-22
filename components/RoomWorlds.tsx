@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Html, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
@@ -26,14 +26,15 @@ function ModelSlot({ url }: { url: string }) {
   return <group scale={k} position={[-c.x * k, -c.y * k, -c.z * k]}><primitive object={scene} /></group>
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-// phone-only vertical anchors: rooms stacked with a wide gap so they're visually distinct.
-const PORTRAIT_PY: [number, number] = [1.4, -2.0]
+// phone-only vertical anchors: Canteen height, Dear Mother height. These are the ONLY two numbers
+// that control how high each room sits on screen. Estimate — expect to need one more small nudge
+// after seeing a screenshot.
+const PORTRAIT_PY: [number, number] = [0.9, -1.55]
 
-// Two clip planes recomputed every frame directly from the camera's real projection (via unproject,
-// Three.js's own tested math — not hand-derived trig), each representing "this exact row of pixels on
-// screen" at SPLIT_FRACTION. ROOM_CLIP[0] keeps only what's ABOVE that row (Canteen's environment),
-// ROOM_CLIP[1] keeps only what's BELOW it (Dear Mother's environment). The direction is verified every
-// frame against a known point (top-center of screen), so it can't silently end up backwards. Phone-only.
+// Two clip planes recomputed every frame directly from the camera's real projection (Three.js's own
+// unproject, not hand trig), each representing "this exact row of pixels on screen" at SPLIT_FRACTION.
+// ROOM_CLIP[0] keeps only what's ABOVE that row (Canteen's floor/legs), ROOM_CLIP[1] keeps only what's
+// BELOW it (Dear Mother's ground). Direction is self-checked every frame. Phone-only. Confirmed working.
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
 
@@ -49,20 +50,11 @@ function PhoneRoomClip() {
     cam.getWorldPosition(_EYE)
     const plane = ROOM_CLIP[0]
     plane.setFromCoplanarPoints(_EYE, _A, _B)
-    _PROBE.set(0, 1, 0.5).unproject(cam) // top-center of screen: always "above" the split line, used to self-check direction
+    _PROBE.set(0, 1, 0.5).unproject(cam)
     if (plane.distanceToPoint(_PROBE) < 0) plane.negate()
     ROOM_CLIP[1].copy(plane).negate()
   })
   return null
-}
-
-// phone-only: full-screen text layer (same box as the canvas, so drei's Html positions text exactly as it
-// does on desktop), trimmed by a screen-fixed clip-path so each room's text can't cross the divider line.
-function makePhoneTextLayer(i: number) {
-  const el = document.createElement('div')
-  const clip = i === 0 ? `inset(0 0 ${(1 - SPLIT_FRACTION) * 100}% 0)` : `inset(${SPLIT_FRACTION * 100}% 0 0 0)`
-  el.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:40;clip-path:${clip};-webkit-clip-path:${clip};`
-  return el
 }
 
 function Room({ i }: { i: number }) {
@@ -73,17 +65,10 @@ function Room({ i }: { i: number }) {
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const tex = useMemo(glowTexture, [])
-  const portal = useMemo(() => {
-    if (!coarse) return { current: document.getElementById('room-ui') as HTMLElement }
-    const el = makePhoneTextLayer(i); document.body.appendChild(el)
-    return { current: el }
-  }, [i])
-  useEffect(() => {
-    if (!coarse) return
-    const el = portal.current
-    if (!el.isConnected) document.body.appendChild(el)
-    return () => { el.remove() }
-  }, [portal])
+  // Text always portals into the one shared #room-ui container, exactly like desktop. No CSS clipping on
+  // text — that was causing text to vanish when it didn't perfectly align with the 3D split line. Only
+  // the 3D geometry needs clip planes; plain spacing (PORTRAIT_PY + the Html offset below) keeps text clear.
+  const portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [i])
   useFrame(({ clock }) => {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
@@ -91,8 +76,7 @@ function Room({ i }: { i: number }) {
     a.h += ((H.i === i ? 1 : 0) - a.h) * 0.04; a.q += ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
     const bm = beacon.current; if (bm) { const bc = sstep(0.25, 0.35, r) * (1 - 0.6 * sstep(0.5, 0.75, r)); (bm.material as THREE.MeshBasicMaterial).opacity = 0.5 * bc * (1 - 0.9 * E.quiet); bm.visible = bc > 0.003; bm.scale.setScalar(3 + 0.3 * Math.sin(t * 0.7 + i)) }
     gr.visible = on; if (!gr.visible) return
-    // Clip only the room's environment (floor/legs/platform/grass) — never the cart or tombstone model
-    // itself. The art group (the actual model) is walked past so it always stays fully visible.
+    // Clip only the room's environment (floor/legs/platform/grass) — never the cart or tombstone model.
     if (!mats.current.length && gr.children.length > 3) gr.traverse((o: any) => {
       if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m: THREE.Material) => {
         if (!mats.current.includes(m)) {
@@ -135,21 +119,24 @@ function Room({ i }: { i: number }) {
 
 function PhoneDivider() {
   const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
+  const started = useRef(false)
+  useFrame(() => {
     if (!coarse) return
-    const wrap = document.createElement('div')
-    wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:45;opacity:0;'
-    const band = document.createElement('div')
-    band.style.cssText = `position:absolute;left:0;right:0;top:calc(${SPLIT_FRACTION * 100}% - 60px);height:120px;display:flex;align-items:center;`
-    const mask = document.createElement('div')
-    mask.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.96) 62%, rgba(0,0,0,0) 100%);'
-    const line = document.createElement('div')
-    line.style.cssText = 'position:relative;width:100%;height:2px;background:linear-gradient(90deg, rgba(60,80,255,0.95) 0%, rgba(150,70,220,0.95) 50%, rgba(255,60,55,0.95) 100%);box-shadow:0 0 14px rgba(130,90,220,0.55);'
-    band.appendChild(mask); band.appendChild(line); wrap.appendChild(band)
-    document.body.appendChild(wrap); ref.current = wrap
-    return () => { wrap.remove(); ref.current = null }
-  }, [])
-  useFrame(() => { if (ref.current) ref.current.style.opacity = String(sstep(0.3, 0.42, P.r) * (1 - E.quiet)) })
+    if (!started.current) {
+      started.current = true
+      const wrap = document.createElement('div')
+      wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:45;opacity:0;'
+      const band = document.createElement('div')
+      band.style.cssText = `position:absolute;left:0;right:0;top:calc(${SPLIT_FRACTION * 100}% - 60px);height:120px;display:flex;align-items:center;`
+      const mask = document.createElement('div')
+      mask.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.96) 38%, rgba(0,0,0,0.96) 62%, rgba(0,0,0,0) 100%);'
+      const line = document.createElement('div')
+      line.style.cssText = 'position:relative;width:100%;height:2px;background:linear-gradient(90deg, rgba(60,80,255,0.95) 0%, rgba(150,70,220,0.95) 50%, rgba(255,60,55,0.95) 100%);box-shadow:0 0 14px rgba(130,90,220,0.55);'
+      band.appendChild(mask); band.appendChild(line); wrap.appendChild(band)
+      document.body.appendChild(wrap); ref.current = wrap
+    }
+    if (ref.current) ref.current.style.opacity = String(sstep(0.3, 0.42, P.r) * (1 - E.quiet))
+  })
   return null
 }
 
