@@ -1,21 +1,28 @@
 'use client'
 import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { bake, fbm, rnd } from '../lib/procTex'
 import { sstep as sm } from '../lib/math'
-import { H } from '../lib/progress'
+import { H, P } from '../lib/progress'
 
 const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
-// phone-only: the sand platform is a flat disc viewed from an angled camera, which always makes a
-// true circle look like a squashed ellipse on screen (unavoidable perspective foreshortening).
-// We pre-stretch the geometry along the camera's depth axis so it reads as round after that
-// foreshortening. Value is an estimate from the live screenshot's visible squash ratio.
-const ELLIPSE_Z = 1.8
+
+// phone-only pillar materials: rust columns + steel collars like desktop, lit by the room lights,
+// with a small built-in glow (emissive) so they can never disappear into the black background.
+const pillarMat = new THREE.MeshStandardMaterial({ color: '#7a4426', roughness: 0.7, metalness: 0.15, emissive: '#3a1608', emissiveIntensity: 1 })
+const collarMat = new THREE.MeshStandardMaterial({ color: '#4a4440', roughness: 0.5, metalness: 0.3, emissive: '#1a120c', emissiveIntensity: 1 })
+
+// phone-only Dear Mother sand: drawn every frame as an exact circle ON SCREEN, then projected back
+// onto the ground, so it reads as perfectly round regardless of camera angle or phone size.
+const PLAT_Y = -0.97      // ground height under the tombstone (local units)
+const SAND_R = 1.8        // circle size (bigger number = bigger circle)
+const SAND_DROP = 0.4     // how far the circle's center sits below the tombstone base (0 = centered on base)
+const SEG = 64
+const _sc = new THREE.Vector3(), _se = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3(), _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sm = new THREE.Matrix4()
 
 export function CanteenEnv() {
   const steam = useRef<THREE.Mesh[]>([])
@@ -37,16 +44,18 @@ export function CanteenEnv() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
-        // phone-only: wider, taller column set so the cart reads as resting on a visible supported
-        // platform (matching the reference). Marked noClip so the per-pixel divider clip plane (used
-        // only on generic environment meshes like floor/sand) never hides these, regardless of exact
-        // height — pillars are decorative support structure that belongs entirely to Canteen.
+        // phone-only: 6 rust support columns with steel collars + 2 crossbeams under the cart.
+        // Span local y -0.45 to -1.95, which ends above the divider line. noClip = never clipped.
         <group userData={{ noClip: true }}>
-          {[-1.6, -1.1, -0.6, -0.2, 0.2, 0.6, 1.1, 1.6].map((x, i) => (
-            <mesh key={`leg${i}`} position={[x, -1.3, -0.4]} material={legMat}><cylinderGeometry args={[0.055, 0.055, 1.7, 10]} /></mesh>
+          {[-1.5, -0.9, -0.3, 0.3, 0.9, 1.5].map((x, i) => (
+            <group key={`leg${i}`} position={[x, 0, -0.4]}>
+              <mesh position={[0, -1.2, 0]} material={pillarMat}><cylinderGeometry args={[0.09, 0.09, 1.5, 12]} /></mesh>
+              <mesh position={[0, -0.56, 0]} material={collarMat}><cylinderGeometry args={[0.15, 0.15, 0.08, 12]} /></mesh>
+              <mesh position={[0, -1.84, 0]} material={collarMat}><cylinderGeometry args={[0.14, 0.14, 0.07, 12]} /></mesh>
+            </group>
           ))}
-          <mesh position={[0, -0.5, -0.4]} material={legMat}><boxGeometry args={[3.6, 0.06, 0.1]} /></mesh>
-          <mesh position={[0, -2.1, -0.4]} material={legMat}><boxGeometry args={[3.6, 0.06, 0.1]} /></mesh>
+          <mesh position={[0, -0.52, -0.4]} material={collarMat}><boxGeometry args={[3.4, 0.08, 0.12]} /></mesh>
+          <mesh position={[0, -1.3, -0.4]} material={collarMat}><boxGeometry args={[3.2, 0.05, 0.08]} /></mesh>
         </group>
       )}
       {!coarse && (
@@ -85,20 +94,22 @@ export function CanteenEnv() {
 }
 export function TombEnv() {
   const fog = useRef<THREE.Mesh[]>([])
+  const plat = useRef<THREE.Mesh>(null)
+  const cache = useRef<number[]>([NaN, NaN, NaN, NaN, NaN, NaN])
+  const { camera, size } = useThree()
   const o = useMemo(() => {
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) {
-      // phone: evenly-spaced ring (plus tiny jitter) so the silhouette reads as a balanced, symmetric
-      // circle instead of randomly clumped. desktop: unchanged original random distribution.
-      const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
+      // desktop: original distribution (unchanged). phone: initial placement only; it is replaced
+      // every frame below so the grass always sits inside the on-screen sand circle.
+      const an = rnd(i, 1) * 6.28
       let x: number, z: number
-      // phone: z is stretched by ELLIPSE_Z to match the pre-stretched platform geometry below, so the
-      // grass ring still hugs the edge of the (now elliptical-in-world-space) sand disc.
-      if (coarse) { const r = 0.55 + rnd(i, 2) * 1.9; x = Math.cos(an) * r; z = Math.sin(an) * r * ELLIPSE_Z }
+      if (coarse) { const r = 0.5 + rnd(i, 2) * 1.5; x = Math.cos(an) * r; z = Math.sin(an) * r }
       else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
       d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
     }
+    if (coarse) grass.frustumCulled = false
     const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
     const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
     const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
@@ -110,14 +121,69 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    const platform = new THREE.CircleGeometry(2.7, 48), platformMat = dark('#141009', 0, 1)
-    return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
+    // phone sand platform: center vertex + SEG ring vertices, positions rewritten in useFrame
+    const ring = new Float32Array((SEG + 1) * 3)
+    const platform = new THREE.BufferGeometry()
+    platform.setAttribute('position', new THREE.BufferAttribute(ring, 3))
+    const nrm = new Float32Array((SEG + 1) * 3); for (let k = 0; k <= SEG; k++) nrm[k * 3 + 1] = 1
+    platform.setAttribute('normal', new THREE.BufferAttribute(nrm, 3))
+    const idx: number[] = []; for (let k = 0; k < SEG; k++) idx.push(0, 1 + k, 1 + ((k + 1) % SEG))
+    platform.setIndex(idx)
+    const platformMat = dark('#141009', 0, 1); platformMat.side = THREE.DoubleSide
+    // phone grass: fixed per-blade angle / distance-from-center / tilt / height
+    const bA = new Float32Array(420), bF = new Float32Array(420), bQ: THREE.Quaternion[] = [], bS: THREE.Vector3[] = []
+    for (let i = 0; i < 420; i++) {
+      bA[i] = (i / 420) * Math.PI * 2 + (rnd(i, 1) - 0.5) * 0.25
+      bF[i] = 0.22 + rnd(i, 2) * 0.74
+      bQ.push(new THREE.Quaternion().setFromEuler(new THREE.Euler((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)))
+      bS.push(new THREE.Vector3(1, 0.5 + rnd(i, 6) * 0.9, 1))
+    }
+    return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat, ring, bA, bF, bQ, bS }
   }, [])
-  useFrame(({ clock }) => { const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } }) })
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime; o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0)); fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
+    // ---- phone only: rebuild sand as an exact on-screen circle ----
+    if (!coarse || P.r < 0.3) return
+    const m = plat.current, par = m ? m.parent : null
+    if (!m || !par) return
+    camera.updateMatrixWorld(); par.updateWorldMatrix(true, false)
+    camera.getWorldPosition(_so)
+    _sc.set(0, PLAT_Y, 0); par.localToWorld(_sc); const gy = _sc.y
+    _se.set(SAND_R, PLAT_Y, 0); par.localToWorld(_se)
+    _sc.project(camera); _se.project(camera)
+    const rx = Math.abs(_se.x - _sc.x), ry = rx * (size.width / size.height)
+    const cx = _sc.x, cy = _sc.y - ry * SAND_DROP
+    const c = cache.current
+    if (Math.abs(c[0] - cx) < 1e-5 && Math.abs(c[1] - cy) < 1e-5 && Math.abs(c[2] - rx) < 1e-5 && Math.abs(c[3] - _so.x) < 1e-5 && Math.abs(c[4] - _so.y) < 1e-5 && Math.abs(c[5] - _so.z) < 1e-5) return
+    c[0] = cx; c[1] = cy; c[2] = rx; c[3] = _so.x; c[4] = _so.y; c[5] = _so.z
+    const hit = (nx: number, ny: number, out: THREE.Vector3) => {
+      _sd.set(nx, ny, 0.5).unproject(camera).sub(_so)
+      let k = _sd.y < -1e-6 ? (gy - _so.y) / _sd.y : 100
+      if (!(k > 0) || k > 100) k = 100
+      out.copy(_so).addScaledVector(_sd, k)
+      par.worldToLocal(out)
+    }
+    const pos = o.ring
+    hit(cx, cy, _sp); pos[0] = _sp.x; pos[1] = PLAT_Y; pos[2] = _sp.z
+    for (let k = 0; k < SEG; k++) {
+      const th = (k / SEG) * Math.PI * 2
+      hit(cx + rx * Math.cos(th), cy + ry * Math.sin(th), _sp)
+      const j = (k + 1) * 3; pos[j] = _sp.x; pos[j + 1] = PLAT_Y; pos[j + 2] = _sp.z
+    }
+    ;(m.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true
+    const ccx = pos[0], ccz = pos[2]
+    for (let i = 0; i < 420; i++) {
+      const kf = ((((o.bA[i] / (Math.PI * 2)) % 1) + 1) % 1) * SEG, k0 = Math.floor(kf) % SEG, f = kf - Math.floor(kf), k1 = (k0 + 1) % SEG
+      const ex = pos[(k0 + 1) * 3] * (1 - f) + pos[(k1 + 1) * 3] * f, ez = pos[(k0 + 1) * 3 + 2] * (1 - f) + pos[(k1 + 1) * 3 + 2] * f
+      _sq.set(ccx + (ex - ccx) * o.bF[i], PLAT_Y + 0.01, ccz + (ez - ccz) * o.bF[i])
+      _sm.compose(_sq, o.bQ[i], o.bS[i]); o.grass.setMatrixAt(i, _sm)
+    }
+    o.grass.instanceMatrix.needsUpdate = true
+  })
   return (
     <group>
       {coarse ? (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} scale={[1, ELLIPSE_Z, 1]} geometry={o.platform} material={o.platformMat} />
+        <mesh ref={plat} geometry={o.platform} material={o.platformMat} frustumCulled={false} />
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
