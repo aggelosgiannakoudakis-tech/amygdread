@@ -182,9 +182,9 @@ export function TombEnv() {
         </>
       )}
       {!coarse && o.under.map((c, i) => <mesh key={i} material={o.rt}><tubeGeometry args={[c, 28, 0.03 + (i % 3) * 0.015, 6, false]} /></mesh>)}
-      <points geometry={o.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>
+      {!coarse && <points geometry={o.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>}
       {!coarse && o.trees.map((t, i) => <group key={i}><mesh position={[t.x, t.h / 2 - 1, t.z]} material={o.tm}><cylinderGeometry args={[0.1, 0.22, t.h, 7]} /></mesh>{t.br.map((c, k) => <mesh key={k} material={o.tm}><tubeGeometry args={[c, 12, 0.05, 5, false]} /></mesh>)}</group>)}
-      {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={o.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
+      {!coarse && [0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={o.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
     </group>
   )
 }
