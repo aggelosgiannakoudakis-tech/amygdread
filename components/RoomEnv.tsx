@@ -1,18 +1,21 @@
 'use client'
 import { useMemo, useRef } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { bake, fbm, rnd } from '../lib/procTex'
 import { sstep as sm } from '../lib/math'
 import { H } from '../lib/progress'
+import { isCompactViewport } from '../lib/device'
 
 const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
-const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-const legMat = new THREE.MeshBasicMaterial({ color: '#4a3524' })
+const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
 
+// The remains of a place that was used: stained wet concrete with faded warning stripes, a puddle, hanging cables, a dead lamp-shade with a weak bulb,
+// distant columns and a beam in the dark, drifting steam, an overturned bucket, cans and a pot lid.
 export function CanteenEnv() {
+  const coarse = isCompactViewport()
   const steam = useRef<THREE.Mesh[]>([])
   const o = useMemo(() => {
     const fl = bake(512, 512, (u, v) => { const a = fbm(u * 6, v * 6, 1), b = fbm(u * 30, v * 30, 2, 3), wet = sm(0.55, 0.68, fbm(u * 3, v * 3, 7)), st = sm(0.55, 0.8, fbm(u * 5, v * 9, 4)), g = (0.15 + 0.08 * a + 0.04 * b) * (1 - 0.45 * wet); return [g + 0.06 * st, g + 0.02 * st, g * 0.95, wet ? 0.12 : 0.85, 0, 0.5 + b * 0.3] },
@@ -20,9 +23,9 @@ export function CanteenEnv() {
     ;[fl.map, fl.orm, fl.bump].forEach((t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2) })
     const gc = document.createElement('canvas'); gc.width = gc.height = 512; const gx = gc.getContext('2d')!; gx.fillStyle = '#000'; gx.fillRect(0, 0, 512, 512); gx.fillStyle = '#fff'
     for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) { gx.fillRect(i * 32, j * 32, 32, 5); gx.fillRect(i * 32, j * 32, 5, 32) }
-    let rg = gx.createRadialGradient(256, 174, 20, 256, 174, 130); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 512, 512)
+    let rg = gx.createRadialGradient(256, 174, 20, 256, 174, 130); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 512, 512) // solid concrete under the canteen, open grate toward the camera
     gx.globalCompositeOperation = 'destination-in'
-    let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
+    let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512) // dissolves at the sides: no shared floor
     lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
     return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
@@ -32,16 +35,17 @@ export function CanteenEnv() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
+        // phone-only: compact platform frame — short legs + one crossbeam, ending well above the divider line
         <group>
-          <mesh userData={{ noClip: true }} position={[0, -0.55, -0.3]} material={legMat}><boxGeometry args={[3.2, 0.06, 1.0]} /></mesh>
-          {[-1.4, -0.8, -0.2, 0.2, 0.8, 1.4].map((x, i) => (
-            <mesh key={`leg${i}`} userData={{ noClip: true }} position={[x, -0.95, -0.3]} material={legMat}><cylinderGeometry args={[0.05, 0.05, 0.8, 10]} /></mesh>
+          {[-1.2, -0.6, 0, 0.6, 1.2].map((x, i) => (
+            <mesh key={`leg${i}`} position={[x, -0.875, -0.4]} material={legMat}><cylinderGeometry args={[0.07, 0.07, 0.75, 10]} /></mesh>
           ))}
-          <mesh userData={{ noClip: true }} position={[0, -1.35, -0.3]} material={legMat}><boxGeometry args={[3.0, 0.06, 0.9]} /></mesh>
+          <mesh position={[0, -1.15, -0.4]} material={legMat}><boxGeometry args={[2.7, 0.07, 0.12]} /></mesh>
         </group>
       )}
       {!coarse && (
         <>
+          {/* structure continuing below the grate: pipes with flanges, run-lines, chassis beams, axle + half-sunk wheels, cables — fading into the dark */}
           {[[-2.2, -0.8, 0.17], [1.8, -1.4, 0.22], [-0.6, 1.6, 0.14], [2.6, 1, 0.18], [-3.1, 0.9, 0.2], [-1.4, 3.4, 0.16], [1.9, 4.4, 0.2], [-2.4, 5.2, 0.18], [0.6, 6, 0.15]].map(([x, z, r], i) => (<group key={`p${i}`}><mesh position={[x, -3.7, z]} material={o.rust}><cylinderGeometry args={[r, r, 6.4, 14]} /></mesh><mesh position={[x, -1.3, z]} material={o.steel}><cylinderGeometry args={[r * 1.6, r * 1.6, 0.12, 14]} /></mesh><mesh position={[x, -2.9, z]} material={o.steel}><cylinderGeometry args={[r * 1.5, r * 1.5, 0.1, 14]} /></mesh></group>))}
           <mesh position={[0, -2.4, -1]} rotation={[0, 0, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 6, 12]} /></mesh><mesh position={[1.2, -3.6, 1.5]} rotation={[Math.PI / 2, 0, 0]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 12, 12]} /></mesh>
           {[-1.8, 1.8].map((x) => <mesh key={x} position={[x, -1.2, 1.5]} material={o.steel}><boxGeometry args={[0.18, 0.5, 12]} /></mesh>)}{[-3, -1, 1, 3, 5, 7].map((z) => <mesh key={z} position={[0, -1.45, z]} material={o.steel}><boxGeometry args={[4.2, 0.25, 0.2]} /></mesh>)}
@@ -75,23 +79,56 @@ export function CanteenEnv() {
   )
 }
 
-const _T_CENTER = new THREE.Vector3(), _T_CAMPOS = new THREE.Vector3(), _T_CAMFWD = new THREE.Vector3(), _T_NEARDIR = new THREE.Vector3(), _T_RIGHTDIR = new THREE.Vector3(), _T_PT = new THREE.Vector3(), _T_PARENTSCALE = new THREE.Vector3()
-
+// One lonely grave in an enormous dark: sparse dead grass, distant bare trees, low cold ground fog.
 export function TombEnv() {
+  const coarse = isCompactViewport()
   const fog = useRef<THREE.Mesh[]>([])
-  const platformRef = useRef<THREE.Mesh>(null)
-  const grassRef = useRef<THREE.Object3D>(null)
-  const { camera } = useThree()
   const o = useMemo(() => {
+    // Desktop grass (original):
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) {
-      const an = coarse ? (i / 420) * 6.28 + (rnd(i, 1) - 0.5) * 0.25 : rnd(i, 1) * 6.28
-      let x: number, z: number
-      if (coarse) { const r = 0.9 + rnd(i, 2) * 2.9; x = Math.cos(an) * r; z = Math.sin(an) * r }
-      else { const r = 0.9 + rnd(i, 2) * 2.5; x = Math.cos(an) * r * 0.9; z = Math.sin(an) * r * 2 + 0.3 }
-      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z); d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7); d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1); d.updateMatrix(); grass.setMatrixAt(i, d.matrix)
+      const an = rnd(i, 1) * 6.28
+      const r = 0.9 + rnd(i, 2) * 2.5
+      const x = Math.cos(an) * r * 0.9
+      const z = Math.sin(an) * r * 2 + 0.3
+      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z)
+      d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)
+      d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1)
+      d.updateMatrix()
+      grass.setMatrixAt(i, d.matrix)
     }
+
+    // Phone grass: 100% stable, planted on sand, visible silhouette
+    const phoneBlade = new THREE.PlaneGeometry(0.034, 0.34, 1, 2)
+    phoneBlade.translate(0, 0.17, 0)
+    const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0c0a10', side: THREE.DoubleSide })
+    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, 320)
+    const pd = new THREE.Object3D()
+    for (let i = 0; i < 320; i++) {
+      let x: number, z: number
+      if (i < 120) {
+        // Inner arc in front of tombstone
+        const an = -Math.PI * 0.85 + rnd(i, 1) * Math.PI * 0.7
+        const r = 0.45 + rnd(i, 2) * 0.42
+        x = Math.cos(an) * r
+        z = Math.sin(an) * r * 0.85
+      } else {
+        // Outer ring inside the sand perimeter
+        const an = rnd(i, 1) * Math.PI * 2
+        const r = 1.25 + rnd(i, 2) * 0.32
+        x = Math.cos(an) * r
+        z = Math.sin(an) * r * 0.88
+      }
+      pd.position.set(x, -0.96, z)
+      pd.rotation.set((rnd(i, 3) - 0.5) * 0.16, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.16)
+      const sc = 0.7 + rnd(i, 6) * 0.5
+      pd.scale.set(sc, sc, sc)
+      pd.updateMatrix()
+      phoneGrass.setMatrixAt(i, pd.matrix)
+    }
+    phoneGrass.instanceMatrix.needsUpdate = true
+
     const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
     const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
     const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
@@ -103,52 +140,32 @@ export function TombEnv() {
     const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-    const platform = new THREE.CircleGeometry(2.2, 48), platformMat = dark('#141009', 0, 1)
-    return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
+
+    // Sand platform:
+    // Phone platform: radius 1.72 (fits nicely inside screen width with ~8.5% margin on both sides, not touching edges)
+    const phonePlatform = new THREE.CircleGeometry(1.72, 64)
+    const platform = new THREE.CircleGeometry(2.2, 48)
+    const platformMat = dark('#141009', 0, 1)
+
+    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, phonePlatform, platformMat }
   }, [])
+
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
-    o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0)); o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
-    fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
-    if (coarse && platformRef.current) {
-      const cam = camera as THREE.Camera
-      cam.updateMatrixWorld()
-      platformRef.current.getWorldPosition(_T_CENTER)
-      cam.getWorldPosition(_T_CAMPOS)
-      cam.getWorldDirection(_T_CAMFWD)
-      let fx = _T_CAMFWD.x, fz = _T_CAMFWD.z
-      const flen = Math.hypot(fx, fz)
-      if (flen < 1e-5) { fx = 0; fz = -1 } else { fx /= flen; fz /= flen }
-      _T_NEARDIR.set(-fx, 0, -fz)
-      _T_RIGHTDIR.set(-fz, 0, fx)
-      const proj = (dir: THREE.Vector3, r: number) => { _T_PT.copy(_T_CENTER).addScaledVector(dir, r); _T_PT.project(cam); return _T_PT }
-      const NEAR_Y_LIMIT = -0.78
-      const WIDTH_X_LIMIT = 0.92
-      let lo = 0, hi = 40
-      for (let iter = 0; iter < 22; iter++) {
-        const mid = (lo + hi) / 2
-        const nearY = proj(_T_NEARDIR, mid).y
-        const rightX = proj(_T_RIGHTDIR, mid).x
-        const leftX = proj(_T_RIGHTDIR, -mid).x
-        const ok = nearY > NEAR_Y_LIMIT && Math.abs(rightX) < WIDTH_X_LIMIT && Math.abs(leftX) < WIDTH_X_LIMIT
-        if (ok) lo = mid; else hi = mid
-      }
-      const worldRadius = lo
-      const parent = platformRef.current.parent
-      let parentScaleX = 1
-      if (parent) { parent.getWorldScale(_T_PARENTSCALE); parentScaleX = _T_PARENTSCALE.x || 1 }
-      const factor = Math.max(0.1, worldRadius / (2.2 * parentScaleX))
-      platformRef.current.scale.setScalar(factor)
-      if (grassRef.current) grassRef.current.scale.set(factor, 1, factor)
+    if (!coarse) {
+      o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0))
+      o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
     }
+    fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
   })
+
   return (
     <group>
       {coarse ? (
-        <>
-          <mesh ref={platformRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
-          <primitive object={o.grass} ref={grassRef} />
-        </>
+        <group position={[0, 0, -0.12]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.phonePlatform} material={o.platformMat} />
+          <primitive object={o.phoneGrass} />
+        </group>
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
@@ -158,7 +175,10 @@ export function TombEnv() {
           <primitive object={o.grass} />
         </>
       )}
-      <instancedMesh args={[undefined as any, undefined as any, 420]} ref={() => {}} visible={false} />
+      {!coarse && o.under.map((c, i) => <mesh key={i} material={o.rt}><tubeGeometry args={[c, 28, 0.03 + (i % 3) * 0.015, 6, false]} /></mesh>)}
+      <points geometry={o.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>
+      {!coarse && o.trees.map((t, i) => <group key={i}><mesh position={[t.x, t.h / 2 - 1, t.z]} material={o.tm}><cylinderGeometry args={[0.1, 0.22, t.h, 7]} /></mesh>{t.br.map((c, k) => <mesh key={k} material={o.tm}><tubeGeometry args={[c, 12, 0.05, 5, false]} /></mesh>)}</group>)}
+      {[0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={o.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
     </group>
   )
 }
