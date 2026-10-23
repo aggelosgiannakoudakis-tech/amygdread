@@ -5,7 +5,11 @@ import * as THREE from 'three'
 import { bake, fbm, rnd } from '../lib/procTex'
 import { sstep as sm } from '../lib/math'
 import { H } from '../lib/progress'
-import { isCompactViewport } from '../lib/device'
+
+function isCompactViewport() {
+  if (typeof window === 'undefined') return false
+  return matchMedia('(pointer:coarse)').matches || window.innerWidth / window.innerHeight < 1
+}
 
 const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
