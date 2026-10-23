@@ -88,7 +88,7 @@ export function TombEnv() {
   const coarse = isCompactViewport()
   const fog = useRef<THREE.Mesh[]>([])
   const o = useMemo(() => {
-    // Desktop grass (original):
+    // Desktop grass (original, untouched):
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) {
@@ -103,30 +103,26 @@ export function TombEnv() {
       grass.setMatrixAt(i, d.matrix)
     }
 
-    // Phone grass: 100% stable, planted on sand, visible silhouette
-    const phoneBlade = new THREE.PlaneGeometry(0.034, 0.34, 1, 2)
-    phoneBlade.translate(0, 0.17, 0)
-    const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0c0a10', side: THREE.DoubleSide })
-    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, 320)
+    // Phone grass: fully static, denser, naturally scattered across the whole sand disc
+    // (sparse near the tombstone base, thicker toward the edge — matches reference image)
+    const SAND_R = 2.2
+    const phoneBlade = new THREE.PlaneGeometry(0.03, 0.3, 1, 2)
+    phoneBlade.translate(0, 0.15, 0)
+    const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0d0b12', side: THREE.DoubleSide })
+    const PHONE_COUNT = 560
+    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_COUNT)
     const pd = new THREE.Object3D()
-    for (let i = 0; i < 320; i++) {
-      let x: number, z: number
-      if (i < 120) {
-        // Inner arc in front of tombstone
-        const an = -Math.PI * 0.85 + rnd(i, 1) * Math.PI * 0.7
-        const r = 0.45 + rnd(i, 2) * 0.42
-        x = Math.cos(an) * r
-        z = Math.sin(an) * r * 0.85
-      } else {
-        // Outer ring inside the sand perimeter
-        const an = rnd(i, 1) * Math.PI * 2
-        const r = 1.25 + rnd(i, 2) * 0.32
-        x = Math.cos(an) * r
-        z = Math.sin(an) * r * 0.88
-      }
-      pd.position.set(x, -0.96, z)
-      pd.rotation.set((rnd(i, 3) - 0.5) * 0.16, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.16)
-      const sc = 0.7 + rnd(i, 6) * 0.5
+    for (let i = 0; i < PHONE_COUNT; i++) {
+      const ang = rnd(i, 1) * Math.PI * 2
+      // uniform-area disc sampling (sqrt), excluding a small dead zone near the tombstone base,
+      // capped well inside the sand radius so it never pokes past the edge
+      const rr = Math.sqrt(0.07 + rnd(i, 2) * 0.93)
+      const r = rr * (SAND_R * 0.88)
+      const x = Math.cos(ang) * r
+      const z = Math.sin(ang) * r
+      pd.position.set(x, -0.965, z)
+      pd.rotation.set((rnd(i, 3) - 0.5) * 0.18, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.18)
+      const sc = 0.55 + rnd(i, 6) * 0.75
       pd.scale.set(sc, sc, sc)
       pd.updateMatrix()
       phoneGrass.setMatrixAt(i, pd.matrix)
@@ -145,13 +141,10 @@ export function TombEnv() {
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
 
-    // Sand platform:
-    // Phone platform: radius 1.72 (fits nicely inside screen width with ~8.5% margin on both sides, not touching edges)
-    const phonePlatform = new THREE.CircleGeometry(1.72, 64)
-    const platform = new THREE.CircleGeometry(2.2, 48)
+    const platform = new THREE.CircleGeometry(SAND_R, 48)
     const platformMat = dark('#141009', 0, 1)
 
-    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, phonePlatform, platformMat }
+    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
 
   useFrame(({ clock }) => {
@@ -160,16 +153,17 @@ export function TombEnv() {
       o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0))
       o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
     }
+    // phone grass: intentionally no transform updates here at all — fully static
     fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
   })
 
   return (
     <group>
       {coarse ? (
-        <group position={[0, 0, -0.12]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.phonePlatform} material={o.platformMat} />
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
           <primitive object={o.phoneGrass} />
-        </group>
+        </>
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />

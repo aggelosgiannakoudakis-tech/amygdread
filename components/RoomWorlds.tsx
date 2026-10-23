@@ -59,13 +59,15 @@ function Room({ i }: { i: number }) {
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const textY = portrait ? PORTRAIT_TEXT_Y : -2.35
+  // phone-only, Dear Mother-only: pushes the tombstone+sand object back into the void and raises it up,
+  // without touching text position, Canteen, or desktop at all (zero offset in every other case)
+  const dmOffset: [number, number, number] = (coarse && i === 1) ? [0, 0.6, -1.1] : [0, 0, 0]
   const tex = useMemo(glowTexture, [])
   const portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [i])
   useFrame(({ clock }) => {
     if (!on && (P.value > 0.62 || P.r > 0)) setOn(true)
     const gr = g.current; if (!gr) return
     const r = P.r, rev = sstep(i ? 0.4 : 0.34, i ? 0.86 : 0.78, r), t = clock.elapsedTime, a = st.current, red = P.reduced
-    // phone has no hover, so force a.h = 1 (full brightness) and a.q = 0 (not quit) to match reference.
     const hoverTarget = coarse ? 1 : (H.i === i ? 1 : 0)
     a.h = coarse ? 1 : a.h + (hoverTarget - a.h) * 0.04
     a.q = coarse ? 0 : a.q + ((H.i >= 0 && H.i !== i ? 1 : 0) - a.q) * 0.04
@@ -98,16 +100,18 @@ function Room({ i }: { i: number }) {
     <mesh ref={beacon} position={[px, py + 0.2, -31]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
     <group ref={g} position={[px, py, -30]} scale={s} visible={false}>
       <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
-      {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
-      {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
+      <group position={dmOffset}>
+        {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
+        {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
+      </group>
       {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
       {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
       <Html position={[0, textY, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
-          <p className="font-mono text-[10px] tracking-[0.5em] text-bone/60">{room.n}</p>
+          <p className={`font-mono text-[10px] tracking-[0.5em] ${coarse ? 'text-bone/90' : 'text-bone/60'}`}>{room.n}</p>
           <h3 className="mt-2 font-display text-[clamp(2.4rem,4.4vw,4.6rem)] font-light uppercase italic leading-[0.9] tracking-[0.02em] text-bone">{room.name}</h3>
-          <p className="mx-auto mt-3 max-w-[26ch] font-mono text-[10px] uppercase leading-[1.9] tracking-[0.3em] text-bone/55">{room.text}</p>
-          <button onClick={() => enterRoom(i)} className="pointer-events-auto mt-4 inline-block border-b border-bone/30 pb-1 font-mono text-[9px] uppercase tracking-[0.5em] text-bone/70 transition-colors duration-700 hover:border-bone hover:text-bone">Enter</button>
+          <p className={`mx-auto mt-3 max-w-[26ch] font-mono text-[10px] uppercase leading-[1.9] tracking-[0.3em] ${coarse ? 'text-bone/90' : 'text-bone/55'}`}>{room.text}</p>
+          <button onClick={() => enterRoom(i)} className={`pointer-events-auto mt-4 inline-block border-b ${coarse ? 'border-bone/70' : 'border-bone/30'} pb-1 font-mono text-[9px] uppercase tracking-[0.5em] ${coarse ? 'text-bone/90' : 'text-bone/70'} transition-colors duration-700 hover:border-bone hover:text-bone`}>Enter</button>
         </div>
       </Html>
     </group>
