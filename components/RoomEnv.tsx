@@ -104,25 +104,32 @@ export function TombEnv() {
     }
 
     // Phone grass: fully static, denser, naturally scattered across the whole sand disc
-    // (sparse near the tombstone base, thicker toward the edge — matches reference image)
+    // (short dense grass throughout + a sparser ring of taller blades near the rim, like the reference)
     const SAND_R = 2.2
     const phoneBlade = new THREE.PlaneGeometry(0.03, 0.3, 1, 2)
     phoneBlade.translate(0, 0.15, 0)
     const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0d0b12', side: THREE.DoubleSide })
-    const PHONE_COUNT = 560
+    const PHONE_COUNT = 760
     const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_COUNT)
     const pd = new THREE.Object3D()
     for (let i = 0; i < PHONE_COUNT; i++) {
       const ang = rnd(i, 1) * Math.PI * 2
-      // uniform-area disc sampling (sqrt), excluding a small dead zone near the tombstone base,
-      // capped well inside the sand radius so it never pokes past the edge
-      const rr = Math.sqrt(0.07 + rnd(i, 2) * 0.93)
-      const r = rr * (SAND_R * 0.88)
+      let r: number, sc: number
+      if (i < 560) {
+        // dense short cover across the disc, uniform-area sampling, avoiding a small dead zone at center
+        const rr = Math.sqrt(0.06 + rnd(i, 2) * 0.86)
+        r = rr * (SAND_R * 0.88)
+        sc = 0.5 + rnd(i, 6) * 0.65
+      } else {
+        // sparser taller blades concentrated near the rim for silhouette depth
+        const rr = 0.78 + rnd(i, 2) * 0.2
+        r = rr * (SAND_R * 0.95)
+        sc = 0.95 + rnd(i, 6) * 0.55
+      }
       const x = Math.cos(ang) * r
       const z = Math.sin(ang) * r
       pd.position.set(x, -0.965, z)
-      pd.rotation.set((rnd(i, 3) - 0.5) * 0.18, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.18)
-      const sc = 0.55 + rnd(i, 6) * 0.75
+      pd.rotation.set((rnd(i, 3) - 0.5) * 0.2, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.2)
       pd.scale.set(sc, sc, sc)
       pd.updateMatrix()
       phoneGrass.setMatrixAt(i, pd.matrix)
@@ -160,10 +167,11 @@ export function TombEnv() {
   return (
     <group>
       {coarse ? (
-        <>
+        // phone-only: sand + grass rigidly tilted together, slightly forward, for a subtle 3D disc look
+        <group rotation={[0.14, 0, 0]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
           <primitive object={o.phoneGrass} />
-        </>
+        </group>
       ) : (
         <>
           <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
