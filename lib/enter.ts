@@ -31,9 +31,9 @@ export function enterCam(a: THREE.Vector3, b: THREE.Vector3, t: number) {
     a.x += Math.sin(t * 70) * 0.02 * E.shake; a.y += Math.cos(t * 83) * 0.015 * E.shake
     D.copy(b).sub(a).normalize(); T.copy(a).addScaledVector(D, 0.3); EF.lerpVectors(AC, T, E.k2)
   } else { // DEAR MOTHER: slow, accelerating approach, stop square to the carved words, hold, then descend in front of the grave
-    // Phone-only: hold further back so the full "MOTHER" carving fits inside the narrower
-    // portrait field of view (desktop keeps the original 1.35 distance, untouched).
-    const DM_DIST = coarse ? 1.35 * 2.2 : 1.35
+    // Phone-only: hold slightly further back so the full "MOTHER" carving fits inside
+    // the narrower portrait field of view. Desktop keeps the original distance.
+    const DM_DIST = coarse ? 1.35 * 2.35 : 1.35
     front(DM_DIST, F1); a.lerpVectors(E.sp, F1, E.k); b.lerpVectors(E.sl, AC, c01(E.k))
     D.copy(AC).sub(F1)
     if (E.d > 0) { a.y = F1.y - 4 * E.d; b.copy(a).add(D) }
