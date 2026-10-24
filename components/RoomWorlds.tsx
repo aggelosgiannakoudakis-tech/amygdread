@@ -62,6 +62,12 @@ function Room({ i }: { i: number }) {
   // phone-only, Dear Mother-only: pushes the tombstone+sand object back into the void and raises it up,
   // without touching text position, Canteen, or desktop at all (zero offset in every other case)
   const dmOffset: [number, number, number] = (coarse && i === 1) ? [0, 0.6, -1.1] : [0, 0, 0]
+  // same offset applied to the ambient background glow plane so it travels WITH the sand/tombstone
+  // group instead of staying anchored at its old fixed spot — previously this caused a second,
+  // misaligned blue glow shape to appear/disappear with camera angle, reading as a "ghost platform"
+  const glowPos: [number, number, number] = (coarse && i === 1) ? [dmOffset[0], 0.2 + dmOffset[1], -1.8 + dmOffset[2]] : [0, 0.2, -1.8]
+  const glowSize: [number, number] = (coarse && i === 1) ? [3.6, 3.2] : [7, 6]
+  const glowOpacity = (coarse && i === 1) ? 0.18 : 0.35
   const tex = useMemo(glowTexture, [])
   const portal = useMemo(() => ({ current: document.getElementById('room-ui') as HTMLElement }), [i])
   useFrame(({ clock }) => {
@@ -99,7 +105,7 @@ function Room({ i }: { i: number }) {
     <>
     <mesh ref={beacon} position={[px, py + 0.2, -31]} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={tex} color={cfg.beacon} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
     <group ref={g} position={[px, py, -30]} scale={s} visible={false}>
-      <mesh position={[0, 0.2, -1.8]}><planeGeometry args={[7, 6]} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={0.35} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
+      <mesh position={glowPos}><planeGeometry args={glowSize} /><meshBasicMaterial map={tex} color={cfg.glow} opacity={glowOpacity} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>
       <group position={dmOffset}>
         {on && <group ref={art}>{room.model ? <ModelSlot url={room.model} /> : i === 0 ? <Canteen /> : <Tombstone />}</group>}
         {on && (i === 0 ? <CanteenEnv /> : <TombEnv />)}
