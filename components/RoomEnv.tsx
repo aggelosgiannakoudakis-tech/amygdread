@@ -110,16 +110,17 @@ export function TombEnv() {
     phoneBlade.translate(0, 0.14, 0)
     const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0b0907', side: THREE.DoubleSide })
 
-    // Uniform-area spread across the whole sand disc (sqrt(random) radius => no edge-ring,
-    // no center-pile). A small clearing right under the stone's base; everywhere else,
-    // including the front, is eligible.
-    const PHONE_MAX = 900
+    // Uniform-area spread using true Math.random() (computed once, here, at mount —
+    // positions never change afterward, so the grass remains perfectly static while
+    // scrolling). The previous seeded hash produced a visible spiral because the same
+    // sequential index drove both angle and radius; true randomness removes that pattern.
+    const PHONE_MAX = 1400
     const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_MAX)
     const pd = new THREE.Object3D()
     let gi = 0
     for (let i = 0; i < PHONE_MAX; i++) {
-      const an = rnd(i, 1) * Math.PI * 2
-      const r = Math.sqrt(rnd(i, 2)) * PLATFORM_R * 0.93
+      const an = Math.random() * Math.PI * 2
+      const r = Math.sqrt(Math.random()) * PLATFORM_R * 0.93
       const x = Math.cos(an) * r
       const z = PLATFORM_Z + Math.sin(an) * r
 
@@ -132,11 +133,10 @@ export function TombEnv() {
       const gy = (PLATFORM_Z - z) / PLATFORM_SCALE
       const surf = tombMound(gx, gy) + 0.05 * fbm(gx * 2, gy * 2, 3)
 
-      const n = fbm(x * 1.6 + 4.2, z * 1.6 - 9.1, 5)
-      const sc = 0.4 + rnd(i, 6) * 0.7 + (n - 0.5) * 0.3
+      const sc = 0.4 + Math.random() * 0.7
 
       pd.position.set(x, PLATFORM_Y + surf + 0.006, z)
-      pd.rotation.set((rnd(i, 3) - 0.5) * 0.32, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.32)
+      pd.rotation.set((Math.random() - 0.5) * 0.32, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.32)
       const s = Math.max(0.28, sc)
       pd.scale.set(s, s, s)
       pd.updateMatrix()
