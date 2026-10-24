@@ -27,7 +27,8 @@ function ModelSlot({ url }: { url: string }) {
 }
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 const PORTRAIT_PY: [number, number] = [1.6, -1.55]
-const PORTRAIT_TEXT_Y = -1.1
+// per-room text Y so Dear Mother's text block can sit closer to its tombstone without moving Canteen's text
+const PORTRAIT_TEXT_Y: [number, number] = [-1.1, -0.55]
 
 const ROOM_CLIP: THREE.Plane[] = [new THREE.Plane(), new THREE.Plane()]
 const _A = new THREE.Vector3(), _B = new THREE.Vector3(), _EYE = new THREE.Vector3(), _PROBE = new THREE.Vector3()
@@ -58,7 +59,7 @@ function Room({ i }: { i: number }) {
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
-  const textY = portrait ? PORTRAIT_TEXT_Y : -2.35
+  const textY = portrait ? PORTRAIT_TEXT_Y[i] : -2.35
   // phone-only, Dear Mother-only: pushes the tombstone+sand object back into the void and raises it up,
   // without touching text position, Canteen, or desktop at all (zero offset in every other case)
   const dmOffset: [number, number, number] = (coarse && i === 1) ? [0, 0.6, -1.1] : [0, 0, 0]
@@ -124,6 +125,7 @@ function Room({ i }: { i: number }) {
       </group>
       {lightsToUse.map((l, j) => <pointLight key={j} ref={(p) => { if (p) L.current[j] = p }} position={l.p as [number, number, number]} color={l.c} distance={12} decay={2} intensity={0} />)}
       {!coarse && <mesh position={[0, 0.2, 0]} onPointerOver={() => { if (P.r > 0.9 && E.room < 0) H.i = i }} onPointerOut={() => { if (H.i === i) H.i = -1 }} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
+      {coarse && <mesh position={[dmOffset[0], 0.2 + dmOffset[1], dmOffset[2]]} onClick={() => { if (P.r > 0.9) enterRoom(i) }}><planeGeometry args={[5, 6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>}
       <Html position={[0, textY, 0]} center portal={portal as any} pointerEvents="none" zIndexRange={[40, 0]}>
         <div ref={txt} style={{ opacity: 0 }} className="w-[min(80vw,24rem)] text-center transition-transform duration-[1800ms]">
           <p className={`font-mono text-[10px] tracking-[0.5em] ${coarse ? 'text-bone/90' : 'text-bone/60'}`}>{room.n}</p>
