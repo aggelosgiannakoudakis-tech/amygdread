@@ -15,6 +15,7 @@ const soft = () => { const c = document.createElement('canvas'); c.width = c.hei
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
+const tombMound = (x: number, z: number) => 0.32 * Math.exp(-(x * x + z * z) / 1.8)
 
 export function CanteenEnv() {
   const coarse = isCompactViewport()
@@ -97,33 +98,52 @@ export function TombEnv() {
       grass.setMatrixAt(i, d.matrix)
     }
 
-    // phone sand: radius matched exactly to the old Tombstone.tsx ground mesh (3.2 * 0.9 = 2.88)
-    const SAND_R = 2.88
+    // Phone platform now uses the exact old Tombstone ground size/style:
+    // old radius 3.2 with old phone scale 0.9 = visible radius 2.88.
+    const PLATFORM_RAW_R = 3.2
+    const PLATFORM_SCALE = 0.9
+    const PLATFORM_R = PLATFORM_RAW_R * PLATFORM_SCALE
+    const PLATFORM_Y = -0.97
+    const PLATFORM_Z = 0.3
 
-    const phoneBlade = new THREE.PlaneGeometry(0.03, 0.3, 1, 2)
-    phoneBlade.translate(0, 0.15, 0)
-    const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0d0b12', side: THREE.DoubleSide })
-    // uniform-area radial distribution (sqrt of random, not plain random) spreads blades evenly
-    // across the ENTIRE sand disc — center, edges, and directly in front of the stone — with no
-    // noise-based cutoff this time (the previous version's cutoff was the bug: it skipped most
-    // instances and left grass bunched into a single patch instead of spread out)
-    const PHONE_COUNT = 900
-    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_COUNT)
+    const phoneBlade = new THREE.PlaneGeometry(0.022, 0.28, 1, 2)
+    phoneBlade.translate(0, 0.14, 0)
+    const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0b0907', side: THREE.DoubleSide })
+
+    // Uniform-area spread across the whole sand disc (sqrt(random) radius => no edge-ring,
+    // no center-pile). A small clearing right under the stone's base; everywhere else,
+    // including the front, is eligible.
+    const PHONE_MAX = 900
+    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_MAX)
     const pd = new THREE.Object3D()
-    for (let i = 0; i < PHONE_COUNT; i++) {
-      const ang = rnd(i, 1) * Math.PI * 2
-      const r = Math.sqrt(rnd(i, 2)) * SAND_R * 0.93
-      const x = Math.cos(ang) * r
-      const z = Math.sin(ang) * r
-      const n = fbm(x * 1.6 + 4.2, z * 1.6 - 9.1, 5) // gentle variation only, never zero
-      const sc = 0.35 + rnd(i, 6) * 0.65 + n * 0.3
-      pd.position.set(x, -0.965, z)
-      pd.rotation.set((rnd(i, 3) - 0.5) * 0.3, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.3)
-      const s = Math.max(0.25, sc)
+    let gi = 0
+    for (let i = 0; i < PHONE_MAX; i++) {
+      const an = rnd(i, 1) * Math.PI * 2
+      const r = Math.sqrt(rnd(i, 2)) * PLATFORM_R * 0.93
+      const x = Math.cos(an) * r
+      const z = PLATFORM_Z + Math.sin(an) * r
+
+      // small clearing right at the stone's base only — everywhere else (including
+      // directly in front, toward the camera) is open to grass
+      const cdx = x, cdz = z - (PLATFORM_Z + 0.05)
+      if (Math.sqrt(cdx * cdx + cdz * cdz) < 0.42) continue
+
+      const gx = x / PLATFORM_SCALE
+      const gy = (PLATFORM_Z - z) / PLATFORM_SCALE
+      const surf = tombMound(gx, gy) + 0.05 * fbm(gx * 2, gy * 2, 3)
+
+      const n = fbm(x * 1.6 + 4.2, z * 1.6 - 9.1, 5)
+      const sc = 0.4 + rnd(i, 6) * 0.7 + (n - 0.5) * 0.3
+
+      pd.position.set(x, PLATFORM_Y + surf + 0.006, z)
+      pd.rotation.set((rnd(i, 3) - 0.5) * 0.32, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.32)
+      const s = Math.max(0.28, sc)
       pd.scale.set(s, s, s)
       pd.updateMatrix()
-      phoneGrass.setMatrixAt(i, pd.matrix)
+      phoneGrass.setMatrixAt(gi, pd.matrix)
+      gi++
     }
+    phoneGrass.count = gi
     phoneGrass.instanceMatrix.needsUpdate = true
 
     const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
@@ -138,17 +158,27 @@ export function TombEnv() {
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
 
-    const platform = new THREE.CircleGeometry(SAND_R, 48)
-    // SAND TEXTURE — confirmed correct by user, do not modify
-    const sandTex = bake(512, 512, (u, v) => {
-      const n1 = fbm(u * 9, v * 9, 21)
-      const n2 = fbm(u * 35, v * 35, 22, 3)
-      const g = 0.5 + 0.09 * n1 + 0.05 * n2
-      return [g * 1.12, g * 0.92, g * 0.62, 1, 0, 0.5]
-    })
-    const platformMat = new THREE.MeshBasicMaterial({ map: sandTex.map })
+    // Exact old platform geometry style: same circle radius, same mound displacement idea,
+    // same old baked ground material from Tombstone.tsx.
+    const platform = new THREE.CircleGeometry(PLATFORM_RAW_R, 64)
+    const pp = platform.attributes.position
+    for (let i = 0; i < pp.count; i++) {
+      const x = pp.getX(i)
+      const y = pp.getY(i)
+      pp.setZ(i, tombMound(x, y) + 0.05 * fbm(x * 2, y * 2, 3))
+    }
+    platform.computeVertexNormals()
 
-    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
+    const gb = bake(512, 512, (u, v) => {
+      const a = fbm(u * 10, v * 10, 1)
+      const b = fbm(u * 40, v * 40, 2, 3)
+      const m = sm(0.55, 0.75, fbm(u * 6, v * 6, 3))
+      const l = sm(0.7, 0.8, b)
+      return [0.06 + 0.05 * a + 0.05 * l - 0.02 * m, 0.045 + 0.04 * a + 0.03 * l + 0.03 * m, 0.03 + 0.03 * a + 0.01 * l, 1, 0, 0.5 + (b - 0.5) * 0.5]
+    })
+    const platformMat = new THREE.MeshStandardMaterial({ map: gb.map, roughnessMap: gb.orm, roughness: 1, bumpMap: gb.bump, bumpScale: 3 })
+
+    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat, platformPos: [0, PLATFORM_Y, PLATFORM_Z] as [number, number, number], platformScale: PLATFORM_SCALE }
   }, [])
 
   useFrame(({ clock }) => {
@@ -164,7 +194,7 @@ export function TombEnv() {
     <group>
       {coarse ? (
         <group rotation={[0.14, 0, 0]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={o.platformPos} scale={[o.platformScale, o.platformScale, 1]} geometry={o.platform} material={o.platformMat} />
           <primitive object={o.phoneGrass} />
         </group>
       ) : (
