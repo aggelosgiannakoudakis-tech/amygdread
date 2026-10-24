@@ -77,6 +77,7 @@ export default function Tombstone() {
   rotation={[-Math.PI / 2, 0, 0]}
   position={[0, -0.95, 0.3]}
   scale={coarse ? [0.9, 0.9, 1] : [0.9, 2.3, 1]}
+  visible={!coarse}
 />
       {o.vines.map((c, i) => <mesh key={i} material={o.vm}><tubeGeometry args={[c, 40, 0.018 + i * 0.004, 6, false]} /></mesh>)}
       {o.roots.map((c, i) => <mesh key={i} material={o.soil}><tubeGeometry args={[c, 30, 0.045, 7, false]} /></mesh>)}
