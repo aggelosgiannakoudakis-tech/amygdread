@@ -14,7 +14,6 @@ function isCompactViewport() {
 const soft = () => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!; const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c) }
 const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r })
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
-const legMat = new THREE.MeshBasicMaterial({ color: '#110d0a' })
 const tombMound = (x: number, z: number) => 0.32 * Math.exp(-(x * x + z * z) / 1.8)
 
 export function CanteenEnv() {
@@ -31,11 +30,32 @@ export function CanteenEnv() {
     let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
-    const beamOuter = new THREE.MeshBasicMaterial({ color: '#ff5522', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
-    const beamInner = new THREE.MeshBasicMaterial({ color: '#ffcf9e', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
-    const edgeBlue = new THREE.MeshBasicMaterial({ color: '#3f5bff', transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false })
-    const edgeMagenta = new THREE.MeshBasicMaterial({ color: '#c238d8', transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false })
-    return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), beamOuter, beamInner, edgeBlue, edgeMagenta, cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
+
+    // Soft volumetric-style beam texture: transparent canvas, radial-ish horizontal
+    // gradient (transparent -> warm orange -> transparent) combined with a vertical
+    // fade (destination-in) so the shaft fades out at both top and bottom. This is a
+    // texture-on-transparent-plane technique, not solid geometry, so it never shows a
+    // hard silhouette edge from any viewing angle.
+    const bc = document.createElement('canvas'); bc.width = 128; bc.height = 256
+    const bx = bc.getContext('2d')!
+    const hg = bx.createLinearGradient(0, 0, 128, 0)
+    hg.addColorStop(0, 'rgba(255,110,40,0)')
+    hg.addColorStop(0.5, 'rgba(255,150,70,1)')
+    hg.addColorStop(1, 'rgba(255,110,40,0)')
+    bx.fillStyle = hg
+    bx.fillRect(0, 0, 128, 256)
+    bx.globalCompositeOperation = 'destination-in'
+    const vg = bx.createLinearGradient(0, 0, 0, 256)
+    vg.addColorStop(0, 'rgba(255,255,255,0)')
+    vg.addColorStop(0.18, 'rgba(255,255,255,1)')
+    vg.addColorStop(0.82, 'rgba(255,255,255,1)')
+    vg.addColorStop(1, 'rgba(255,255,255,0)')
+    bx.fillStyle = vg
+    bx.fillRect(0, 0, 128, 256)
+    const beamTex = new THREE.CanvasTexture(bc)
+    const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+
+    return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), beamMat, cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
   }, [])
   useFrame(({ clock }) => { const t = clock.elapsedTime; steam.current.forEach((m, k) => { if (!m) return; const c = (t * 0.07 + k * 0.33) % 1; m.position.y = 0.9 + c * 1.5; m.scale.setScalar(0.8 + c * 1.4) }) })
   return (
@@ -43,17 +63,12 @@ export function CanteenEnv() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
         <group>
-          {[-1.2, -0.6, 0, 0.6, 1.2].map((x, i) => (
-            <mesh key={`leg${i}`} position={[x, -1.0, -0.6]} material={legMat}><cylinderGeometry args={[0.035, 0.035, 0.6, 10]} /></mesh>
-          ))}
-          {[-1.7, 1.7].map((x, i) => (
-            <group key={`beam${i}`} position={[x, -0.05, -0.5]} rotation={[0, 0, i === 0 ? -0.12 : 0.12]}>
-              <mesh material={o.beamOuter}><coneGeometry args={[0.4, 1.2, 20, 1, true]} /></mesh>
-              <mesh material={o.beamInner}><coneGeometry args={[0.1, 1.2, 16, 1, true]} /></mesh>
+          {[-1.55, 1.55].map((x, i) => (
+            <group key={`beam${i}`} position={[x, 0.5, -0.55]} rotation={[0, 0, i === 0 ? 0.12 : -0.12]}>
+              <mesh material={o.beamMat}><planeGeometry args={[0.55, 3.0]} /></mesh>
+              <mesh material={o.beamMat} rotation={[0, Math.PI / 2, 0]}><planeGeometry args={[0.55, 3.0]} /></mesh>
             </group>
           ))}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-1.1, -0.465, 1.1]} material={o.edgeBlue}><planeGeometry args={[1.4, 0.5]} /></mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[1.1, -0.465, 1.1]} material={o.edgeMagenta}><planeGeometry args={[1.4, 0.5]} /></mesh>
         </group>
       )}
       {!coarse && (
