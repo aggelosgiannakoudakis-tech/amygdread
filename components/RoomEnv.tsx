@@ -16,8 +16,6 @@ const dark = (c = '#0a0a0a', m = 0.8, r = 0.6) => new THREE.MeshStandardMaterial
 const V = (a: number[][]) => new THREE.CatmullRomCurve3(a.map((q) => new THREE.Vector3(q[0], q[1], q[2])))
 const legMat = new THREE.MeshBasicMaterial({ color: '#1c1a17' })
 
-// The remains of a place that was used: stained wet concrete with faded warning stripes, a puddle, hanging cables, a dead lamp-shade with a weak bulb,
-// distant columns and a beam in the dark, drifting steam, an overturned bucket, cans and a pot lid.
 export function CanteenEnv() {
   const coarse = isCompactViewport()
   const steam = useRef<THREE.Mesh[]>([])
@@ -27,9 +25,9 @@ export function CanteenEnv() {
     ;[fl.map, fl.orm, fl.bump].forEach((t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2) })
     const gc = document.createElement('canvas'); gc.width = gc.height = 512; const gx = gc.getContext('2d')!; gx.fillStyle = '#000'; gx.fillRect(0, 0, 512, 512); gx.fillStyle = '#fff'
     for (let i = 0; i < 16; i++) for (let j = 0; j < 16; j++) { gx.fillRect(i * 32, j * 32, 32, 5); gx.fillRect(i * 32, j * 32, 5, 32) }
-    let rg = gx.createRadialGradient(256, 174, 20, 256, 174, 130); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 512, 512) // solid concrete under the canteen, open grate toward the camera
+    let rg = gx.createRadialGradient(256, 174, 20, 256, 174, 130); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 512, 512)
     gx.globalCompositeOperation = 'destination-in'
-    let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512) // dissolves at the sides: no shared floor
+    let lg = gx.createLinearGradient(0, 0, 512, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.22, 'rgba(255,255,255,1)'); lg.addColorStop(0.78, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
     return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
@@ -39,7 +37,6 @@ export function CanteenEnv() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={coarse ? [0, -0.47, -0.3] : [0, -0.47, 1.6]} material={o.floor}><planeGeometry args={coarse ? [3.4, 3.6] : [6.4, 10]} /></mesh>
       {coarse && (
-        // phone-only: compact platform frame — short legs + one crossbeam, ending well above the divider line
         <group>
           {[-1.2, -0.6, 0, 0.6, 1.2].map((x, i) => (
             <mesh key={`leg${i}`} position={[x, -0.875, -0.4]} material={legMat}><cylinderGeometry args={[0.07, 0.07, 0.75, 10]} /></mesh>
@@ -49,7 +46,6 @@ export function CanteenEnv() {
       )}
       {!coarse && (
         <>
-          {/* structure continuing below the grate: pipes with flanges, run-lines, chassis beams, axle + half-sunk wheels, cables — fading into the dark */}
           {[[-2.2, -0.8, 0.17], [1.8, -1.4, 0.22], [-0.6, 1.6, 0.14], [2.6, 1, 0.18], [-3.1, 0.9, 0.2], [-1.4, 3.4, 0.16], [1.9, 4.4, 0.2], [-2.4, 5.2, 0.18], [0.6, 6, 0.15]].map(([x, z, r], i) => (<group key={`p${i}`}><mesh position={[x, -3.7, z]} material={o.rust}><cylinderGeometry args={[r, r, 6.4, 14]} /></mesh><mesh position={[x, -1.3, z]} material={o.steel}><cylinderGeometry args={[r * 1.6, r * 1.6, 0.12, 14]} /></mesh><mesh position={[x, -2.9, z]} material={o.steel}><cylinderGeometry args={[r * 1.5, r * 1.5, 0.1, 14]} /></mesh></group>))}
           <mesh position={[0, -2.4, -1]} rotation={[0, 0, Math.PI / 2]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 6, 12]} /></mesh><mesh position={[1.2, -3.6, 1.5]} rotation={[Math.PI / 2, 0, 0]} material={o.rust}><cylinderGeometry args={[0.12, 0.12, 12, 12]} /></mesh>
           {[-1.8, 1.8].map((x) => <mesh key={x} position={[x, -1.2, 1.5]} material={o.steel}><boxGeometry args={[0.18, 0.5, 12]} /></mesh>)}{[-3, -1, 1, 3, 5, 7].map((z) => <mesh key={z} position={[0, -1.45, z]} material={o.steel}><boxGeometry args={[4.2, 0.25, 0.2]} /></mesh>)}
@@ -83,12 +79,10 @@ export function CanteenEnv() {
   )
 }
 
-// One lonely grave in an enormous dark: sparse dead grass, distant bare trees, low cold ground fog.
 export function TombEnv() {
   const coarse = isCompactViewport()
   const fog = useRef<THREE.Mesh[]>([])
   const o = useMemo(() => {
-    // Desktop grass (original, untouched):
     const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
     const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
     for (let i = 0; i < 420; i++) {
@@ -103,37 +97,36 @@ export function TombEnv() {
       grass.setMatrixAt(i, d.matrix)
     }
 
-    // Phone grass: fully static, denser, naturally scattered across the whole sand disc
-    // (short dense grass throughout + a sparser ring of taller blades near the rim, like the reference)
-    const SAND_R = 2.2
+    // phone sand: radius matched exactly to the old (now-hidden) Tombstone.tsx ground mesh —
+    // CircleGeometry(3.2) scaled 0.9 on phone = effective radius 2.88
+    const SAND_R = 2.88
+
     const phoneBlade = new THREE.PlaneGeometry(0.03, 0.3, 1, 2)
     phoneBlade.translate(0, 0.15, 0)
     const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0d0b12', side: THREE.DoubleSide })
-    const PHONE_COUNT = 760
-    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_COUNT)
+    // single continuous distribution (no hard "zones"/rings): radial power-law for natural
+    // center-to-edge taper + low-frequency noise ("clump") mask so blades form organic patches
+    // and gaps instead of an even carpet, a straight pattern, or a visible ring at some radius
+    const PHONE_MAX = 1100
+    const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_MAX)
     const pd = new THREE.Object3D()
-    for (let i = 0; i < PHONE_COUNT; i++) {
+    let gi = 0
+    for (let i = 0; i < PHONE_MAX; i++) {
       const ang = rnd(i, 1) * Math.PI * 2
-      let r: number, sc: number
-      if (i < 560) {
-        // dense short cover across the disc, uniform-area sampling, avoiding a small dead zone at center
-        const rr = Math.sqrt(0.06 + rnd(i, 2) * 0.86)
-        r = rr * (SAND_R * 0.88)
-        sc = 0.5 + rnd(i, 6) * 0.65
-      } else {
-        // sparser taller blades concentrated near the rim for silhouette depth
-        const rr = 0.78 + rnd(i, 2) * 0.2
-        r = rr * (SAND_R * 0.95)
-        sc = 0.95 + rnd(i, 6) * 0.55
-      }
+      const r = Math.pow(rnd(i, 2), 0.6) * SAND_R * 0.92
       const x = Math.cos(ang) * r
       const z = Math.sin(ang) * r
+      const clump = fbm(x * 1.1 + 12.3, z * 1.1 - 7.7, 4)
+      if (clump < 0.27) continue
+      const sc = 0.4 + rnd(i, 6) * 0.95
       pd.position.set(x, -0.965, z)
-      pd.rotation.set((rnd(i, 3) - 0.5) * 0.2, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.2)
+      pd.rotation.set((rnd(i, 3) - 0.5) * 0.3, rnd(i, 4) * Math.PI * 2, (rnd(i, 5) - 0.5) * 0.3)
       pd.scale.set(sc, sc, sc)
       pd.updateMatrix()
-      phoneGrass.setMatrixAt(i, pd.matrix)
+      phoneGrass.setMatrixAt(gi, pd.matrix)
+      gi++
     }
+    phoneGrass.count = gi
     phoneGrass.instanceMatrix.needsUpdate = true
 
     const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
@@ -149,7 +142,17 @@ export function TombEnv() {
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
 
     const platform = new THREE.CircleGeometry(SAND_R, 48)
-    const platformMat = dark('#141009', 0, 1)
+    // phone-only sand: baked warm tan/khaki noise texture, applied to an UNLIT MeshBasicMaterial.
+    // Unlit is intentional — it keeps the disc perfectly uniform and stable regardless of point-light
+    // position, the forward tilt, or the dmOffset push-back (an earlier MeshStandardMaterial version
+    // here produced an uneven near-bright/far-dark gradient that read as a second "ghost" disc).
+    const sandTex = bake(512, 512, (u, v) => {
+      const n1 = fbm(u * 9, v * 9, 21)
+      const n2 = fbm(u * 35, v * 35, 22, 3)
+      const g = 0.5 + 0.09 * n1 + 0.05 * n2
+      return [g * 1.12, g * 0.92, g * 0.62, 1, 0, 0.5]
+    })
+    const platformMat = new THREE.MeshBasicMaterial({ map: sandTex.map })
 
     return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat }
   }, [])
@@ -160,14 +163,12 @@ export function TombEnv() {
       o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0))
       o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
     }
-    // phone grass: intentionally no transform updates here at all — fully static
     fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
   })
 
   return (
     <group>
       {coarse ? (
-        // phone-only: sand + grass rigidly tilted together, slightly forward, for a subtle 3D disc look
         <group rotation={[0.14, 0, 0]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.97, 0]} geometry={o.platform} material={o.platformMat} />
           <primitive object={o.phoneGrass} />

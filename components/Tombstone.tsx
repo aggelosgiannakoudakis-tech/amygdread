@@ -80,8 +80,9 @@ export default function Tombstone() {
   visible={!coarse}
 />
       {o.vines.map((c, i) => <mesh key={i} material={o.vm}><tubeGeometry args={[c, 40, 0.018 + i * 0.004, 6, false]} /></mesh>)}
-      {o.roots.map((c, i) => <mesh key={i} material={o.soil}><tubeGeometry args={[c, 30, 0.045, 7, false]} /></mesh>)}
-      <primitive object={o.vineLeaves} /><primitive object={o.litter} />
+      {!coarse && o.roots.map((c, i) => <mesh key={i} material={o.soil}><tubeGeometry args={[c, 30, 0.045, 7, false]} /></mesh>)}
+      <primitive object={o.vineLeaves} />
+      {!coarse && <primitive object={o.litter} />}
     </group>
   )
 }
