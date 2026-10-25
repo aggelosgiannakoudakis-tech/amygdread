@@ -31,29 +31,38 @@ export function CanteenEnv() {
     lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
 
-    // Soft volumetric-style beam texture: transparent canvas, horizontal gradient
-    // (transparent -> saturated warm amber-orange -> transparent) combined with a
-    // vertical fade (destination-in) so the beam is almost invisible at its base and
-    // gradually brightens going up. Texture-on-transparent-plane technique, not solid
-    // geometry, so it never shows a hard silhouette edge from any viewing angle.
-    const bc = document.createElement('canvas'); bc.width = 128; bc.height = 256
+    // Beam texture: single-plane beams (no crossed/double-stacked planes — that was
+    // the cause of the previous washed-out/white look under AdditiveBlending, since
+    // overlapping identical additive layers push G/B channels toward white while R
+    // was already clipped at 255). Horizontal gradient = saturated orange-amber core
+    // fading to deep orange-red at the edges. Vertical gradient holds true zero alpha
+    // through the lower ~38% of the plane (so the mesh's physical bottom edge sits
+    // deep inside fully-invisible territory, eliminating the hard "cutoff" look),
+    // then ramps up smoothly, with a brief soft taper at the very top instead of a
+    // hard 100% cap.
+    const bc = document.createElement('canvas'); bc.width = 128; bc.height = 320
     const bx = bc.getContext('2d')!
     const hg = bx.createLinearGradient(0, 0, 128, 0)
-    hg.addColorStop(0, 'rgba(255,70,20,0)')
-    hg.addColorStop(0.5, 'rgba(255,120,35,1)')
-    hg.addColorStop(1, 'rgba(255,70,20,0)')
+    hg.addColorStop(0, 'rgba(180,40,10,0)')
+    hg.addColorStop(0.5, 'rgba(255,100,20,1)')
+    hg.addColorStop(1, 'rgba(180,40,10,0)')
     bx.fillStyle = hg
-    bx.fillRect(0, 0, 128, 256)
+    bx.fillRect(0, 0, 128, 320)
     bx.globalCompositeOperation = 'destination-in'
-    const vg = bx.createLinearGradient(0, 0, 0, 256)
+    const vg = bx.createLinearGradient(0, 0, 0, 320)
     vg.addColorStop(0, 'rgba(255,255,255,0)')
-    vg.addColorStop(0.5, 'rgba(255,255,255,0.18)')
-    vg.addColorStop(0.8, 'rgba(255,255,255,0.85)')
-    vg.addColorStop(1, 'rgba(255,255,255,1)')
+    vg.addColorStop(0.38, 'rgba(255,255,255,0)')
+    vg.addColorStop(0.6, 'rgba(255,255,255,0.32)')
+    vg.addColorStop(0.85, 'rgba(255,255,255,0.95)')
+    vg.addColorStop(0.94, 'rgba(255,255,255,1)')
+    vg.addColorStop(1, 'rgba(255,255,255,0)')
     bx.fillStyle = vg
-    bx.fillRect(0, 0, 128, 256)
+    bx.fillRect(0, 0, 128, 320)
     const beamTex = new THREE.CanvasTexture(bc)
-    const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+    beamTex.wrapS = beamTex.wrapT = THREE.ClampToEdgeWrapping
+    beamTex.generateMipmaps = false
+    beamTex.minFilter = THREE.LinearFilter
+    const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
 
     return { floorC: [[0.3, 0.6], [-0.9, 0.2], [1.1, -0.3]].map(([x, z]) => V([[x, -0.44, z], [x + 0.2, -0.44, z + 2], [x - 0.1, -0.44, z + 4], [x + 0.3, -0.44, z + 6]])), under: ud, floor: new THREE.MeshStandardMaterial({ map: fl.map, roughnessMap: fl.orm, roughness: 1, bumpMap: fl.bump, bumpScale: 2, alphaMap: new THREE.CanvasTexture(gc), transparent: true }), steel: dark('#101010', 0.8, 0.6), cable: dark('#060606', 0, 0.8), rust: dark('#2a1a10', 0.5, 0.8), puddle: dark('#030303', 0.7, 0.04), bulb: new THREE.MeshBasicMaterial({ color: '#ffc98a' }), tex: soft(), beamMat, cables: [V([[-1.8, 4.5, -0.6], [-1.7, 3.3, -0.5], [-1.95, 2.2, -0.4], [-1.85, 1.5, -0.3]]), V([[2.1, 4.5, -1.2], [2.2, 3.4, -1.1], [1.95, 2.4, -1], [2.05, 1.9, -0.9]]), V([[0.4, 4.5, -2], [0.3, 3.5, -2.1], [0.55, 2.9, -2.1]])] }
   }, [])
@@ -64,10 +73,7 @@ export function CanteenEnv() {
       {coarse && (
         <group>
           {[-1.55, 1.55].map((x, i) => (
-            <group key={`beam${i}`} position={[x, 0.5, -0.55]} rotation={[0, 0, 0]}>
-              <mesh material={o.beamMat}><planeGeometry args={[0.55, 3.0]} /></mesh>
-              <mesh material={o.beamMat} rotation={[0, Math.PI / 2, 0]}><planeGeometry args={[0.55, 3.0]} /></mesh>
-            </group>
+            <mesh key={`beam${i}`} position={[x, -0.1, -0.55]} material={o.beamMat}><planeGeometry args={[0.55, 4.2]} /></mesh>
           ))}
         </group>
       )}
