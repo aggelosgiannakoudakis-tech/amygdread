@@ -31,15 +31,6 @@ export function CanteenEnv() {
     lg = gx.createLinearGradient(0, 0, 0, 512); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.18, 'rgba(255,255,255,1)'); lg.addColorStop(0.9, 'rgba(255,255,255,1)'); lg.addColorStop(1, 'rgba(255,255,255,0)'); gx.fillStyle = lg; gx.fillRect(0, 0, 512, 512)
     const ud = [[-2.2, -0.8], [1.8, -1.4], [-0.6, 1.6], [2.6, 1], [-3.1, 0.9]].map(([x, z]) => V([[x * 0.9, -0.5, z], [x * 0.9 + 0.2, -1.5, z + 0.1], [x - 0.1, -2.8, z + 0.2], [x + 0.15, -4.4, z]]))
 
-    // Beam texture: single-plane beams (no crossed/double-stacked planes — that was
-    // the cause of the previous washed-out/white look under AdditiveBlending, since
-    // overlapping identical additive layers push G/B channels toward white while R
-    // was already clipped at 255). Horizontal gradient = saturated orange-amber core
-    // fading to deep orange-red at the edges. Vertical gradient holds true zero alpha
-    // through the lower ~38% of the plane (so the mesh's physical bottom edge sits
-    // deep inside fully-invisible territory, eliminating the hard "cutoff" look),
-    // then ramps up smoothly, with a brief soft taper at the very top instead of a
-    // hard 100% cap.
     const bc = document.createElement('canvas'); bc.width = 128; bc.height = 320
     const bx = bc.getContext('2d')!
     const hg = bx.createLinearGradient(0, 0, 128, 0)
@@ -73,7 +64,7 @@ export function CanteenEnv() {
       {coarse && (
         <group>
           {[-1.55, 1.55].map((x, i) => (
-            <mesh key={`beam${i}`} position={[x, -0.1, -0.55]} material={o.beamMat}><planeGeometry args={[0.55, 4.2]} /></mesh>
+            <mesh key={`beam${i}`} position={[x, 0.2, -0.55]} material={o.beamMat}><planeGeometry args={[0.55, 4.2]} /></mesh>
           ))}
         </group>
       )}
@@ -130,8 +121,6 @@ export function TombEnv() {
       grass.setMatrixAt(i, d.matrix)
     }
 
-    // Phone platform now uses the exact old Tombstone ground size/style:
-    // old radius 3.2 with old phone scale 0.9 = visible radius 2.88.
     const PLATFORM_RAW_R = 3.2
     const PLATFORM_SCALE = 0.9
     const PLATFORM_R = PLATFORM_RAW_R * PLATFORM_SCALE
@@ -142,10 +131,6 @@ export function TombEnv() {
     phoneBlade.translate(0, 0.14, 0)
     const phoneGrassMat = new THREE.MeshBasicMaterial({ color: '#0b0907', side: THREE.DoubleSide })
 
-    // Uniform-area spread using true Math.random() (computed once, here, at mount —
-    // positions never change afterward, so the grass remains perfectly static while
-    // scrolling). The previous seeded hash produced a visible spiral because the same
-    // sequential index drove both angle and radius; true randomness removes that pattern.
     const PHONE_MAX = 1400
     const phoneGrass = new THREE.InstancedMesh(phoneBlade, phoneGrassMat, PHONE_MAX)
     const pd = new THREE.Object3D()
@@ -156,8 +141,6 @@ export function TombEnv() {
       const x = Math.cos(an) * r
       const z = PLATFORM_Z + Math.sin(an) * r
 
-      // small clearing right at the stone's base only — everywhere else (including
-      // directly in front, toward the camera) is open to grass
       const cdx = x, cdz = z - (PLATFORM_Z + 0.05)
       if (Math.sqrt(cdx * cdx + cdz * cdz) < 0.42) continue
 
@@ -190,8 +173,6 @@ export function TombEnv() {
     const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
     const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
 
-    // Exact old platform geometry style: same circle radius, same mound displacement idea,
-    // same old baked ground material from Tombstone.tsx.
     const platform = new THREE.CircleGeometry(PLATFORM_RAW_R, 64)
     const pp = platform.attributes.position
     for (let i = 0; i < pp.count; i++) {
