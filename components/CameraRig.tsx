@@ -14,6 +14,7 @@ const K: [number[], number[]][] = [
 const posC = new THREE.CatmullRomCurve3(K.map((k) => new THREE.Vector3(...k[0])), false, 'centripetal')
 const lookC = new THREE.CatmullRomCurve3(K.map((k) => new THREE.Vector3(...k[1])), false, 'centripetal')
 const a = new THREE.Vector3(), b = new THREE.Vector3(), RL = new THREE.Vector3(0, 0.1, -30), hx = { v: 0 }
+const dirV = new THREE.Vector3() // reused each frame to avoid allocating a new Vector3 via .clone() every tick
 
 export default function CameraRig() {
   useFrame((state) => {
@@ -30,7 +31,7 @@ export default function CameraRig() {
     const roll = red ? 0 : bell(0.68, 0.78, 0.9, p) * 0.12
     camera.up.set(Math.sin(roll), Math.cos(roll), 0)
     camera.position.copy(a); camera.lookAt(b)
-    const dir = b.clone().sub(a).normalize(), into = sstep(0.58, 0.72, p), d = a.length() * (1 - into) + (2.2 + 4 * sstep(0.88, 1, p)) * into
+    const dir = dirV.copy(b).sub(a).normalize(), into = sstep(0.58, 0.72, p), d = a.length() * (1 - into) + (2.2 + 4 * sstep(0.88, 1, p)) * into
     FOCUS.copy(a).addScaledVector(dir, d)
     if (r > 0) FOCUS.lerp(RL, sstep(0.25, 0.6, r))
     if (E.room >= 0) FOCUS.copy(EF)

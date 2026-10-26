@@ -39,11 +39,16 @@ export default function Experience() {
     const lenis = new Lenis({ lerp: reduced ? 1 : 0.08 })
     LENIS.inst = lenis; lenis.stop() // scroll stays locked until the initialization sequence completes
     lenis.on('scroll', ScrollTrigger.update)
+    let lastTension = NaN // avoids redundant CSS custom-property writes on frames where the value hasn't meaningfully moved
     const tick = (_t: number, dtMs: number) => {
       lenis.raf(performance.now())
       const k = reduced ? 1 : 1 - Math.exp(-(dtMs / 1000) * 6)
       P.value += (P.target - P.value) * k; P.r += (P.rTarget - P.r) * k
-      document.documentElement.style.setProperty('--tension', String(bell(0.3, 0.5, 0.85, P.value)))
+      const tension = bell(0.3, 0.5, 0.85, P.value)
+      if (Math.abs(tension - lastTension) > 0.0005) {
+        lastTension = tension
+        document.documentElement.style.setProperty('--tension', String(tension))
+      }
     }
     gsap.ticker.add(tick); gsap.ticker.lagSmoothing(0)
     const ctx = gsap.context(() => {
