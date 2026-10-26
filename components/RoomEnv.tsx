@@ -106,20 +106,9 @@ export function CanteenEnv() {
 export function TombEnv() {
   const coarse = isCompactViewport()
   const fog = useRef<THREE.Mesh[]>([])
-  const o = useMemo(() => {
-    const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
-    const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
-    for (let i = 0; i < 420; i++) {
-      const an = rnd(i, 1) * 6.28
-      const r = 0.9 + rnd(i, 2) * 2.5
-      const x = Math.cos(an) * r * 0.9
-      const z = Math.sin(an) * r * 2 + 0.3
-      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z)
-      d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)
-      d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1)
-      d.updateMatrix()
-      grass.setMatrixAt(i, d.matrix)
-    }
+
+  const phoneO = useMemo(() => {
+    if (!coarse) return null
 
     const PLATFORM_RAW_R = 3.2
     const PLATFORM_SCALE = 0.9
@@ -161,18 +150,6 @@ export function TombEnv() {
     phoneGrass.count = gi
     phoneGrass.instanceMatrix.needsUpdate = true
 
-    const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
-    const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
-    const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
-    const st = bake(512, 512, (u, v) => { const band = Math.floor((1 - v) * 8 + fbm(u * 3, v * 3, 9) * 2), cols = [[0.05, 0.035, 0.025], [0.1, 0.07, 0.045], [0.07, 0.06, 0.05], [0.13, 0.09, 0.06], [0.06, 0.05, 0.04], [0.1, 0.08, 0.06], [0.05, 0.04, 0.035], [0.08, 0.06, 0.05]], c = cols[band % 8], n = 0.7 + 0.6 * fbm(u * 30, v * 30, 5), stn = sm(0.74, 0.8, fbm(u * 14, v * 14, 6)); return [c[0] * n + 0.06 * stn, c[1] * n + 0.06 * stn, c[2] * n + 0.055 * stn, 1, 0, 0.5 + (n - 1) * 0.5] })
-    const ac = document.createElement('canvas'); ac.width = 8; ac.height = 256; const ax = ac.getContext('2d')!; const ag = ax.createLinearGradient(0, 0, 0, 256); ag.addColorStop(0, '#fff'); ag.addColorStop(0.35, '#bbb'); ag.addColorStop(1, '#000'); ax.fillStyle = ag; ax.fillRect(0, 0, 8, 256)
-    const wall = new THREE.CylinderGeometry(3.2, 2.9, 4.6, 64, 14, true), wp = wall.attributes.position; for (let i = 0; i < wp.count; i++) { const x = wp.getX(i), z = wp.getZ(i), y = wp.getY(i), f = 1 + 0.06 * (fbm(Math.atan2(z, x) * 3, y * 0.8, 2) - 0.5); wp.setX(i, x * f); wp.setZ(i, z * f) } wall.computeVertexNormals()
-    const wm = new THREE.MeshStandardMaterial({ map: st.map, roughnessMap: st.orm, roughness: 1, bumpMap: st.bump, bumpScale: 3, alphaMap: new THREE.CanvasTexture(ac), transparent: true })
-    const R = (y: number) => 3.2 - 0.3 * ((-0.85 - y) / 4.6), onWall = (phi: number, y: number, k = 1) => new THREE.Vector3(R(y) * k * Math.sin(phi) * 0.9, y, 0.3 + R(y) * k * Math.cos(phi) * 2.3)
-    const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
-    const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
-    const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
-
     const platform = new THREE.CircleGeometry(PLATFORM_RAW_R, 64)
     const pp = platform.attributes.position
     for (let i = 0; i < pp.count; i++) {
@@ -191,38 +168,70 @@ export function TombEnv() {
     })
     const platformMat = new THREE.MeshStandardMaterial({ map: gb.map, roughnessMap: gb.orm, roughness: 1, bumpMap: gb.bump, bumpScale: 3 })
 
-    return { grass, phoneGrass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1), platform, platformMat, platformPos: [0, PLATFORM_Y, PLATFORM_Z] as [number, number, number], platformScale: PLATFORM_SCALE }
-  }, [])
+    return { phoneGrass, platform, platformMat, platformPos: [0, PLATFORM_Y, PLATFORM_Z] as [number, number, number], platformScale: PLATFORM_SCALE }
+  }, [coarse])
+
+  const deskO = useMemo(() => {
+    if (coarse) return null
+
+    const blade = new THREE.PlaneGeometry(0.025, 0.4, 1, 3); blade.translate(0, 0.2, 0)
+    const grass = new THREE.InstancedMesh(blade, new THREE.MeshStandardMaterial({ color: '#3a3320', roughness: 1, side: THREE.DoubleSide }), 420), d = new THREE.Object3D()
+    for (let i = 0; i < 420; i++) {
+      const an = rnd(i, 1) * 6.28
+      const r = 0.9 + rnd(i, 2) * 2.5
+      const x = Math.cos(an) * r * 0.9
+      const z = Math.sin(an) * r * 2 + 0.3
+      d.position.set(x, -0.95 + 0.32 * Math.exp(-(x * x + (z / 2.3) * (z / 2.3)) / 1.8), z)
+      d.rotation.set((rnd(i, 3) - 0.5) * 0.7, rnd(i, 4) * 6.28, (rnd(i, 5) - 0.5) * 0.7)
+      d.scale.set(1, 0.5 + rnd(i, 6) * 0.9, 1)
+      d.updateMatrix()
+      grass.setMatrixAt(i, d.matrix)
+    }
+
+    const tm = dark('#050605', 0, 1), trees = [[-5, -7], [-3.4, -9], [-1.2, -8], [2.4, -9.5], [4.2, -7.5], [5.6, -10]].map(([x, z], i) => ({ x, z, h: 6 + rnd(i, 9) * 2, br: [0, 1, 2].map((k) => V([[x, 3 + k * 0.6, z], [x + (rnd(i * 3 + k, 7) - 0.5) * 1.4, 4 + k * 0.7, z + 0.1], [x + (rnd(i * 3 + k, 8) - 0.5) * 2.4, 5.2 + k * 0.6, z]])) }))
+    const rt = dark('#1b120a', 0, 1), under = Array.from({ length: 9 }, (_, i) => V([[(rnd(i, 31) - 0.5) * 1.8, -0.85, 1.1 + rnd(i, 32) * 0.9], [(rnd(i, 33) - 0.5) * 1.6, -2, 1.1 + rnd(i, 34) * 0.9], [(rnd(i, 35) - 0.5) * 1.8, -3.4, 1 + rnd(i, 36)], [(rnd(i, 37) - 0.5) * 1.6, -5.2, 1.1 + rnd(i, 38) * 0.9]]))
+    const pg = new THREE.BufferGeometry(), pa = new Float32Array(260 * 3); for (let i = 0; i < 260; i++) { pa[i * 3] = (rnd(i, 41) - 0.5) * 3; pa[i * 3 + 1] = -1 - rnd(i, 42) * 5; pa[i * 3 + 2] = 0.7 + rnd(i, 43) * 1.8 } pg.setAttribute('position', new THREE.BufferAttribute(pa, 3))
+    const st = bake(512, 512, (u, v) => { const band = Math.floor((1 - v) * 8 + fbm(u * 3, v * 3, 9) * 2), cols = [[0.05, 0.035, 0.025], [0.1, 0.07, 0.045], [0.07, 0.06, 0.05], [0.13, 0.09, 0.06], [0.06, 0.05, 0.04], [0.1, 0.08, 0.06], [0.05, 0.04, 0.035], [0.08, 0.06, 0.05]], c = cols[band % 8], n = 0.7 + 0.6 * fbm(u * 30, v * 30, 5), stn = sm(0.74, 0.8, fbm(u * 14, v * 14, 6)); return [c[0] * n + 0.06 * stn, c[1] * n + 0.06 * stn, c[2] * n + 0.055 * stn, 1, 0, 0.5 + (n - 1) * 0.5] })
+    const ac = document.createElement('canvas'); ac.width = 8; ac.height = 256; const ax = ac.getContext('2d')!; const ag = ax.createLinearGradient(0, 0, 0, 256); ag.addColorStop(0, '#fff'); ag.addColorStop(0.35, '#bbb'); ag.addColorStop(1, '#000'); ax.fillStyle = ag; ax.fillRect(0, 0, 8, 256)
+    const wall = new THREE.CylinderGeometry(3.2, 2.9, 4.6, 64, 14, true), wp = wall.attributes.position; for (let i = 0; i < wp.count; i++) { const x = wp.getX(i), z = wp.getZ(i), y = wp.getY(i), f = 1 + 0.06 * (fbm(Math.atan2(z, x) * 3, y * 0.8, 2) - 0.5); wp.setX(i, x * f); wp.setZ(i, z * f) } wall.computeVertexNormals()
+    const wm = new THREE.MeshStandardMaterial({ map: st.map, roughnessMap: st.orm, roughness: 1, bumpMap: st.bump, bumpScale: 3, alphaMap: new THREE.CanvasTexture(ac), transparent: true })
+    const R = (y: number) => 3.2 - 0.3 * ((-0.85 - y) / 4.6), onWall = (phi: number, y: number, k = 1) => new THREE.Vector3(R(y) * k * Math.sin(phi) * 0.9, y, 0.3 + R(y) * k * Math.cos(phi) * 2.3)
+    const wroots = Array.from({ length: 8 }, (_, i) => { const phi = -1.1 + i * 0.3 + (rnd(i, 51) - 0.5) * 0.1; return V([-1.1, -2, -3, -4].map((y, j) => { const p = onWall(phi + (rnd(i * 4 + j, 52) - 0.5) * 0.12, y - (rnd(i, 53)) * 0.3, 1.02); return [p.x, p.y, p.z] })) })
+    const stones = Array.from({ length: 7 }, (_, i) => { const p = onWall(-1.2 + i * 0.4 + rnd(i, 61) * 0.15, -1.4 - rnd(i, 62) * 2.8, 0.985); return { p, s: 0.15 + rnd(i, 63) * 0.15 } })
+    const planks = [[-0.4, -2.6], [0.6, -3.5]].map(([phi, y], i) => ({ p: onWall(phi, y, 1.0), r: -phi, t: i }))
+
+    return { grass, tm, trees, tex: soft(), rt, under, pg, wall, wm, wroots, stones, planks, stone: dark('#2a2a28', 0, 1), wood: dark('#1c140d', 0, 1) }
+  }, [coarse])
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
-    if (!coarse) {
-      o.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0))
-      o.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
+    if (!coarse && deskO) {
+      deskO.grass.rotation.z = Math.sin(t * 0.4) * 0.002 * (1 + 5 * (H.i === 1 ? 1 : 0))
+      deskO.grass.rotation.x = Math.cos(t * 0.33) * 0.0015 * (1 + 5 * (H.i === 1 ? 1 : 0))
     }
     fog.current.forEach((m, k) => { if (m) { m.position.x = Math.sin(t * 0.05 + k * 2) * 0.8; m.rotation.z = t * 0.01 * (k + 1) } })
   })
 
   return (
     <group>
-      {coarse ? (
+      {coarse && phoneO ? (
         <group rotation={[0.14, 0, 0]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={o.platformPos} scale={[o.platformScale, o.platformScale, 1]} geometry={o.platform} material={o.platformMat} />
-          <primitive object={o.phoneGrass} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={phoneO.platformPos} scale={[phoneO.platformScale, phoneO.platformScale, 1]} geometry={phoneO.platform} material={phoneO.platformMat} />
+          <primitive object={phoneO.phoneGrass} />
         </group>
-      ) : (
+      ) : deskO ? (
         <>
-          <mesh geometry={o.wall} material={o.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
-          {o.wroots.map((c, i) => <mesh key={`w${i}`} material={o.rt}><tubeGeometry args={[c, 20, 0.05 + (i % 3) * 0.015, 6, false]} /></mesh>)}
-          {o.stones.map((q, i) => <mesh key={`s${i}`} position={q.p} scale={[q.s, q.s * 0.7, q.s * 0.8]} rotation={[i, i * 2, 0]} material={o.stone}><icosahedronGeometry args={[1, 1]} /></mesh>)}
-          {o.planks.map((q, i) => <mesh key={`k${i}`} position={q.p} rotation={[0.1 * i, q.r, 0.2 - 0.3 * i]} material={o.wood}><boxGeometry args={[0.6, 0.06, 0.16]} /></mesh>)}
-          <primitive object={o.grass} />
+          <mesh geometry={deskO.wall} material={deskO.wm} position={[0, -3.15, 0.3]} scale={[0.9, 1, 2.3]} />
+          {deskO.wroots.map((c, i) => <mesh key={`w${i}`} material={deskO.rt}><tubeGeometry args={[c, 20, 0.05 + (i % 3) * 0.015, 6, false]} /></mesh>)}
+          {deskO.stones.map((q, i) => <mesh key={`s${i}`} position={q.p} scale={[q.s, q.s * 0.7, q.s * 0.8]} rotation={[i, i * 2, 0]} material={deskO.stone}><icosahedronGeometry args={[1, 1]} /></mesh>)}
+          {deskO.planks.map((q, i) => <mesh key={`k${i}`} position={q.p} rotation={[0.1 * i, q.r, 0.2 - 0.3 * i]} material={deskO.wood}><boxGeometry args={[0.6, 0.06, 0.16]} /></mesh>)}
+          <primitive object={deskO.grass} />
         </>
-      )}
-      {!coarse && o.under.map((c, i) => <mesh key={i} material={o.rt}><tubeGeometry args={[c, 28, 0.03 + (i % 3) * 0.015, 6, false]} /></mesh>)}
-      {!coarse && <points geometry={o.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>}
-      {!coarse && o.trees.map((t, i) => <group key={i}><mesh position={[t.x, t.h / 2 - 1, t.z]} material={o.tm}><cylinderGeometry args={[0.1, 0.22, t.h, 7]} /></mesh>{t.br.map((c, k) => <mesh key={k} material={o.tm}><tubeGeometry args={[c, 12, 0.05, 5, false]} /></mesh>)}</group>)}
-      {!coarse && [0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={o.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
+      ) : null}
+      {!coarse && deskO && deskO.under.map((c, i) => <mesh key={i} material={deskO.rt}><tubeGeometry args={[c, 28, 0.03 + (i % 3) * 0.015, 6, false]} /></mesh>)}
+      {!coarse && deskO && <points geometry={deskO.pg}><pointsMaterial size={0.03} color="#3a2a1c" sizeAttenuation transparent opacity={0.8} depthWrite={false} /></points>}
+      {!coarse && deskO && deskO.trees.map((t, i) => <group key={i}><mesh position={[t.x, t.h / 2 - 1, t.z]} material={deskO.tm}><cylinderGeometry args={[0.1, 0.22, t.h, 7]} /></mesh>{t.br.map((c, k) => <mesh key={k} material={deskO.tm}><tubeGeometry args={[c, 12, 0.05, 5, false]} /></mesh>)}</group>)}
+      {!coarse && deskO && [0, 1, 2].map((k) => <mesh key={k} ref={(m) => { if (m) fog.current[k] = m }} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.78 + k * 0.12, 0.3 - k]}><planeGeometry args={[7, 7]} /><meshBasicMaterial map={deskO.tex} color="#4a4636" opacity={0.13} transparent blending={THREE.AdditiveBlending} depthWrite={false} /></mesh>)}
     </group>
   )
 }
