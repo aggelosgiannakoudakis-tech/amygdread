@@ -16,15 +16,22 @@ import { LOAD } from '../lib/progress'
 const Fx = dynamic(() => import('./Fx'), { ssr: false })
 
 // Forces WebGL to compile every material's shader program ahead of time, while still hidden behind the loading screen,
-// instead of paying that cost the instant each object first becomes visible mid-scroll (the cause of the two scroll-triggered stutters).
+// instead of paying that cost the instant each object first becomes visible mid-scroll.
+// IMPORTANT: this only fires once LOAD.model is true — i.e. once BrainModel's time-sliced ~436-piece builder has
+// actually finished and the brain's real materials are attached to the scene (see BrainModel.tsx). Firing on a
+// fixed frame count (the previous approach) risked compiling before the brain even existed in the scene graph,
+// silently skipping it and paying the cost live instead — this is believed to be the cause of the visible
+// colour-pop on load (desktop only, where the extra organic()-shader materials + Fx post-processing add real
+// compile weight that phone doesn't have).
 function Warmup() {
   const { gl, scene, camera } = useThree()
-  const n = useRef(0)
+  const stage = useRef(0) // 0 = waiting for brain, 1 = armed, 2 = first compile done, 3 = second compile done
+  const armedFor = useRef(0)
   useFrame(() => {
-    n.current++
-    if (n.current === 3 || n.current === 45 || n.current === 150) {
-      try { gl.compile(scene, camera) } catch {}
-    }
+    if (stage.current === 0) { if (LOAD.model) stage.current = 1; return }
+    armedFor.current++
+    if (stage.current === 1 && armedFor.current === 2) { stage.current = 2; try { gl.compile(scene, camera) } catch {} }
+    else if (stage.current === 2 && armedFor.current === 20) { stage.current = 3; try { gl.compile(scene, camera) } catch {} }
   })
   return null
 }

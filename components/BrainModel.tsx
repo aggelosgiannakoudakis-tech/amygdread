@@ -57,6 +57,13 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
   const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
+  // Tracks the last brain-sequence progress value the per-piece loop actually ran for. Once the
+  // user has scrolled past the brain (deep in room territory), this value stops changing and the
+  // ~436-piece position/rotation loop below would otherwise keep recomputing and rewriting the
+  // exact same transforms every frame, forever, for an invisible object. Skipping that redundant
+  // work is what was happening right as the brain group reactivates when scrolling back up —
+  // this guard removes the burst without changing a single resulting transform value.
+  const lastPieceP = useRef(-1)
   const q = useMemo(() => new THREE.Quaternion(), [])
   const e = useMemo(() => new THREE.Euler(), [])
   const tmp = useMemo(() => new THREE.Vector3(), []), fd = useMemo(() => new THREE.Vector3(), []), wp = useMemo(() => new THREE.Vector3(), [])
@@ -74,19 +81,23 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     g.position.y = 0.22 * live
     g.scale.setScalar(1 + 0.12 * sstep(0.1, 0.5, p))
     const tremAmp = red ? 0 : bell(0.15, 0.28, 0.46, p)
-    for (const pc of rig.pieces) {
-      const u = Math.min(1, Math.max(0, (p - pc.start) / pc.dur))
-      const ease = u * u * u * (u * (6 * u - 15) + 10)
-      const drift = Math.max(0, p - pc.start - pc.dur) * 0.5
-      tmp.copy(pc.dir).multiplyScalar(pc.dist * (ease + drift)).add(pc.home)
-      if (!red) {
-        const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
-        const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
-        if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+    const pieceWork = tremAmp > 0 || Math.abs(p - lastPieceP.current) > 0.0004
+    if (pieceWork) {
+      lastPieceP.current = p
+      for (const pc of rig.pieces) {
+        const u = Math.min(1, Math.max(0, (p - pc.start) / pc.dur))
+        const ease = u * u * u * (u * (6 * u - 15) + 10)
+        const drift = Math.max(0, p - pc.start - pc.dur) * 0.5
+        tmp.copy(pc.dir).multiplyScalar(pc.dist * (ease + drift)).add(pc.home)
+        if (!red) {
+          const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
+          const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
+          if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+        }
+        pc.mesh.position.copy(tmp)
+        const sp = ease + drift * 0.5
+        e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
       }
-      pc.mesh.position.copy(tmp)
-      const sp = ease + drift * 0.5
-      e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
     }
   })
 

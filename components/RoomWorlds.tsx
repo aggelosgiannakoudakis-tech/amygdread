@@ -57,6 +57,11 @@ function Room({ i }: { i: number }) {
   const lightsToUse = coarse ? cfg.lights.slice(0, 3) : cfg.lights
   const beacon = useRef<THREE.Mesh>(null), g = useRef<THREE.Group>(null), art = useRef<THREE.Group>(null), L = useRef<THREE.PointLight[]>([]), txt = useRef<HTMLDivElement>(null)
   const mats = useRef<THREE.Material[]>([]), st = useRef({ h: 0, q: 0 }), [on, setOn] = useState(true)
+  // Skips rewriting every room material's opacity when the computed value hasn't meaningfully
+  // changed since last frame (same pattern already shipped in Experience.tsx's --tension write).
+  // Purely redundant-write elimination: the written value, when it IS written, is identical to
+  // what it always would have been — only skips re-writing the same number over and over.
+  const lastOp = useRef(-1)
   const { size } = useThree(), portrait = size.width / size.height < 1
   const s = portrait ? 0.55 : 1, px = portrait ? 0 : i ? 3.6 : -3.6, py = portrait ? PORTRAIT_PY[i] : 0.4
   const textY = portrait ? PORTRAIT_TEXT_Y[i] : -2.35
@@ -108,7 +113,7 @@ function Room({ i }: { i: number }) {
       })
     })
     const op = Math.pow(rev, 1.4) * (1 - 0.45 * a.q) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1))
-    mats.current.forEach((m) => { m.opacity = m.userData.b * op })
+    if (Math.abs(op - lastOp.current) > 0.001) { lastOp.current = op; mats.current.forEach((m) => { m.opacity = m.userData.b * op }) }
     cfg.lights.forEach((l, j) => { const pl = L.current[j]; if (pl) pl.intensity = l.i * Math.pow(rev, 1.2) * (1 + 0.9 * a.h * (j === 0 ? 1 : i === 1 && j === 1 ? 1.2 : 0.3)) * (1 - 0.5 * a.q) * (1 + (red ? 0 : 0.05 * Math.sin(t * 0.8 + i))) * (1 - 0.9 * E.quiet * (E.room === i ? 0 : 1)) * (i === 0 ? 1 + 0.8 * Math.max(0, E.k) : 1 - 0.95 * E.dark) * (i === 0 && j === 3 ? 1 + 0.15 * a.h * Math.sin(t * 19 + Math.sin(t * 3) * 4) : 1) })
     gr.position.set(px, py, -30 + a.h - a.q * 0.8)
     if (art.current) { art.current.rotation.y = 0; art.current.rotation.x = 0; art.current.position.y = red ? 0 : Math.sin(t * 0.4 + i) * 0.02 }

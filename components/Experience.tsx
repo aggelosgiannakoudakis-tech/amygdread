@@ -19,33 +19,37 @@ import SoundControl from './SoundControl'
 import Observation from './Observation'
 import ErrorBoundary from './ErrorBoundary'
 import { E, leaveRoom } from '../lib/enter'
+
 const BrainScene = dynamic(() => import('./BrainScene'), { ssr: false })
 
 export default function Experience() {
   const timeline = useRef<HTMLDivElement>(null)
-    const [started, setStarted] = useState(false), [booking, setBooking] = useState<number | null>(null)
-  const onReady = useCallback(() => { LOAD.model = true }, []), onDone = useCallback(() => { P.introStart = performance.now(); setStarted(true); (LENIS.inst as { start?: () => void } | null)?.start?.() }, [])
+  const [started, setStarted] = useState(false), [booking, setBooking] = useState<number | null>(null)
+  const onReady = useCallback(() => { LOAD.model = true }, [])
+  const onDone = useCallback(() => { P.introStart = performance.now(); setStarted(true); (LENIS.inst as { start?: () => void } | null)?.start?.() }, [])
 
   useEffect(() => {
     E.setBooking = setBooking
-    const pop = () => { if (E.room >= 0) leaveRoom() }, esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && E.room >= 0 && !E.busy) history.state?.room !== undefined ? history.back() : leaveRoom() }
+    const pop = () => { if (E.room >= 0) leaveRoom() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && E.room >= 0 && !E.busy) history.state?.room !== undefined ? history.back() : leaveRoom() }
     addEventListener('popstate', pop); addEventListener('keydown', esc)
     return () => { removeEventListener('popstate', pop); removeEventListener('keydown', esc) }
   }, [])
+
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger)
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     P.reduced = reduced
     const lenis = new Lenis({ lerp: reduced ? 1 : 0.08 })
-    LENIS.inst = lenis; lenis.stop() // scroll stays locked until the initialization sequence completes
+    LENIS.inst = lenis; lenis.stop()
     lenis.on('scroll', ScrollTrigger.update)
-    let lastTension = NaN // avoids redundant CSS custom-property writes on frames where the value hasn't meaningfully moved
+    let lastTension = NaN
     const tick = (_t: number, dtMs: number) => {
       lenis.raf(performance.now())
       const k = reduced ? 1 : 1 - Math.exp(-(dtMs / 1000) * 6)
       P.value += (P.target - P.value) * k; P.r += (P.rTarget - P.r) * k
       const tension = bell(0.3, 0.5, 0.85, P.value)
-      if (Math.abs(tension - lastTension) > 0.0005) {
+      if (tension !== lastTension) {
         lastTension = tension
         document.documentElement.style.setProperty('--tension', String(tension))
       }
@@ -56,12 +60,6 @@ export default function Experience() {
     })
     const move = (e: PointerEvent) => { P.mx = (e.clientX / innerWidth) * 2 - 1; P.my = (e.clientY / innerHeight) * 2 - 1 }
     addEventListener('pointermove', move, { passive: true })
-    // Mobile browsers resize the visible viewport as the address bar shows/hides while scrolling, and
-    // iOS in particular often does this WITHOUT firing a normal window "resize" event. Lenis/ScrollTrigger
-    // calculate the page's total scrollable distance once; if that goes stale, the page can report "end of
-    // scroll" before the user has actually reached the real bottom of the content. We correct for this by:
-    // 1) listening to the dedicated visualViewport resize event (fires reliably on iOS/Android for this case)
-    // 2) forcing a couple of safety re-measurements shortly after load, in case no event fires at all.
     let resizeTimer: ReturnType<typeof setTimeout>
     const refresh = () => { lenis.resize(); ScrollTrigger.refresh() }
     const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(refresh, 150) }
@@ -86,8 +84,6 @@ export default function Experience() {
       <LabelLayer /><ThreatWarning /><div className="vignette" /><div className="grain" />
       <Overlay ready={started} />
       <div ref={timeline} className="relative z-10 h-[1000vh]" aria-hidden />
-      {/* Desktop uses this single overlay (unchanged). Phone uses the two clipped halves below instead,
-          so one room's text can never physically render on top of the other room's geometry. */}
       <div id="room-ui" className="pointer-events-none fixed inset-0 z-40" />
       <div id="room-ui-top" className="pointer-events-none fixed inset-x-0 top-0 z-40 overflow-hidden" style={{ height: `${SPLIT_FRACTION * 100}dvh` }} />
       <div id="room-ui-bottom" className="pointer-events-none fixed inset-x-0 z-40 overflow-hidden" style={{ top: `${SPLIT_FRACTION * 100}dvh`, height: `${(1 - SPLIT_FRACTION) * 100}dvh` }} />
