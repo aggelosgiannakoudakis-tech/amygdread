@@ -15,21 +15,43 @@ import { LOAD } from '../lib/progress'
 
 const Fx = dynamic(() => import('./Fx'), { ssr: false })
 
-// Best-effort second pass: once the brain has already warmed itself up and called
-// onReady, this quietly pre-compiles everything else in the scene (rooms, dust,
-// wordmark, postprocessing) a few frames later — while you're still at the top of
-// the site — instead of each one compiling for the first time exactly when it
-// scrolls into view later. No visual effect: compileAsync only prepares GPU
-// programs, it doesn't render or change anything.
+// Three.js's compile()/compileAsync() walk the scene with traverseVisible(), so any object
+// that is currently visible=false (the rooms, specimen room, anything not scrolled to yet)
+// is skipped entirely and never gets its shaders compiled. Those shaders then compile for
+// the first time at the exact moment the object becomes visible mid-scroll, which profiling
+// measured as a ~3.3s main-thread stall (getProgramParameter / link-status wait).
+//
+// This walks the scene one top-level child at a time, briefly marks that subtree visible,
+// compiles it, then restores every visibility flag — all inside one synchronous block, so
+// no frame can ever be painted while something is temporarily visible. Spreading it one
+// child per 12 frames keeps each compile small instead of one long freeze.
 function SceneWarmup({ armed }: { armed: { current: boolean } }) {
   const { gl, scene, camera } = useThree()
-  const done = useRef(false)
-  const frames = useRef(0)
+  const queue = useRef<THREE.Object3D[] | null>(null)
+  const i = useRef(0)
+  const wait = useRef(0)
+
   useFrame(() => {
-    if (done.current || !armed.current) return
-    frames.current++
-    if (frames.current === 10) { done.current = true; gl.compileAsync(scene, camera).catch(() => {}) }
+    if (!armed.current) return
+    if (queue.current === null) queue.current = [...scene.children]
+    if (i.current >= queue.current.length) return
+    if (wait.current++ % 12 !== 0) return
+
+    const target = queue.current[i.current++]
+    if (!target) return
+
+    const hidden: THREE.Object3D[] = []
+    target.traverse((o) => { if (o.visible === false) { hidden.push(o); o.visible = true } })
+    const selfHidden = target.visible === false
+    if (selfHidden) target.visible = true
+
+    try { gl.compileAsync(scene, camera, target).catch(() => {}) } catch {}
+
+    // Restored synchronously, before the renderer ever gets a chance to draw a frame.
+    if (selfHidden) target.visible = false
+    for (const o of hidden) o.visible = false
   })
+
   return null
 }
 
