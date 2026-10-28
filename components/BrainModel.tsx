@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { P, S } from '../lib/progress'
 import { sstep, bell } from '../lib/math'
@@ -10,7 +10,6 @@ import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
 const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, ...o }))
-// Overlapping neighbouring meshes z-fight, so their colours are kept close: contrast between them reads as speckle.
 function makeMaterials() {
   const cortex = [0, 1, 2, 3].map((i) => mk({ color: new THREE.Color('#977872').offsetHSL(0, 0, (i - 1.5) * 0.006), sheenColor: new THREE.Color('#a8837b'), sheenRoughness: 0.7 }))
   const sulcus = mk({ color: '#86665f', sheenColor: new THREE.Color('#8f6b64'), sheenRoughness: 0.8 })
@@ -29,15 +28,14 @@ type Rig = { pieces: Piece[]; center: THREE.Vector3; size: number }
 
 export default function BrainModel({ onReady }: { onReady: () => void }) {
   const { scene } = useGLTF('/models/brain.glb', '/draco/')
+  const { gl, camera } = useThree()
   const group = useRef<THREE.Group>(null)
   const smooth = useRef({ x: 0, y: 0 })
   const mats = useMemo(makeMaterials, [])
   const [rig, setRig] = useState<Rig | null>(null)
   const builder = useRef<PieceBuilder | null>(null)
+  const warmed = useRef(false)
 
-  // Spreads the one-time per-mesh setup for all ~436 brain pieces across many small timed steps
-  // instead of one long blocking burst. Runs entirely while the loading screen still covers the
-  // canvas, so nothing about what the user sees or when changes — only how the main thread is used.
   useEffect(() => { builder.current = new PieceBuilder(scene); setRig(null) }, [scene])
 
   useFrame(() => {
@@ -46,14 +44,28 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     if (b.step(6)) {
       const { pieces, center, size } = b.result()
       const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
-      // ~1.3M triangles: drop the thin nerve fibres on touch devices to protect frame rate
       if (coarse) pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
       pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m]; p.mesh.frustumCulled = false })
       setRig({ pieces, center, size })
     }
   })
 
-  useEffect(() => { if (!rig) return; S.pieces = rig.pieces; S.norm = { c: rig.center, s: TARGET / rig.size }; onReady() }, [rig, onReady])
+  useEffect(() => {
+    if (!rig) return
+    S.pieces = rig.pieces
+    S.norm = { c: rig.center, s: TARGET / rig.size }
+    if (warmed.current) { onReady(); return }
+    warmed.current = true
+    // Compiles the brain's shader programs now, while still hidden behind the loading
+    // screen, instead of letting them compile for the first time the instant the brain
+    // is drawn on screen. Confirmed via Chrome Performance profiling: that lazy first
+    // compile (getProgramParameter / link-status checks) was a ~3s main-thread stall
+    // happening exactly when the brain became visible — the "dull then pops to color"
+    // freeze. No visual change — onReady still fires once, just after compiling
+    // finishes instead of before it.
+    gl.compileAsync(scene, camera).then(onReady).catch(onReady)
+  }, [rig, onReady, gl, camera, scene])
+
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
   const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
