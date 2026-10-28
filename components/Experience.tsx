@@ -24,6 +24,7 @@ const BrainScene = dynamic(() => import('./BrainScene'), { ssr: false })
 
 export default function Experience() {
   const timeline = useRef<HTMLDivElement>(null)
+  const vignette = useRef<HTMLDivElement>(null)
   const [started, setStarted] = useState(false), [booking, setBooking] = useState<number | null>(null)
   const onReady = useCallback(() => { LOAD.model = true }, [])
   const onDone = useCallback(() => { P.introStart = performance.now(); setStarted(true); (LENIS.inst as { start?: () => void } | null)?.start?.() }, [])
@@ -51,7 +52,12 @@ export default function Experience() {
       const tension = bell(0.3, 0.5, 0.85, P.value)
       if (tension !== lastTension) {
         lastTension = tension
-        document.documentElement.style.setProperty('--tension', String(tension))
+        // Written directly on the .vignette element (the only consumer of this variable)
+        // instead of document.documentElement. Setting a custom property on <html> forces
+        // Chromium to treat the whole document as a potential inheritor and recompute style
+        // for it every frame; scoping the write to the one element that actually reads it
+        // produces the identical rendered gradient while invalidating only that element.
+        vignette.current?.style.setProperty('--tension', String(tension))
       }
     }
     gsap.ticker.add(tick); gsap.ticker.lagSmoothing(0)
@@ -81,7 +87,7 @@ export default function Experience() {
           <BrainScene onReady={onReady} />
         </ErrorBoundary>
       </div>
-      <LabelLayer /><ThreatWarning /><div className="vignette" /><div className="grain" />
+      <LabelLayer /><ThreatWarning /><div ref={vignette} className="vignette" /><div className="grain" />
       <Overlay ready={started} />
       <div ref={timeline} className="relative z-10 h-[1000vh]" aria-hidden />
       <div id="room-ui" className="pointer-events-none fixed inset-0 z-40" />
