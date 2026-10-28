@@ -22,9 +22,10 @@ const Fx = dynamic(() => import('./Fx'), { ssr: false })
 // measured as a ~3.3s main-thread stall (getProgramParameter / link-status wait).
 //
 // This walks the scene one top-level child at a time, briefly marks that subtree visible,
-// compiles it, then restores every visibility flag — all inside one synchronous block, so
-// no frame can ever be painted while something is temporarily visible. Spreading it one
-// child per 12 frames keeps each compile small instead of one long freeze.
+// compiles the whole scene (already-compiled materials are cache hits and cost ~nothing),
+// then restores every visibility flag — all inside one synchronous block, so no frame can
+// ever be painted while something is temporarily visible. Spreading it one child per 12
+// frames keeps each compile small instead of one long freeze.
 function SceneWarmup({ armed }: { armed: { current: boolean } }) {
   const { gl, scene, camera } = useThree()
   const queue = useRef<THREE.Object3D[] | null>(null)
@@ -45,7 +46,7 @@ function SceneWarmup({ armed }: { armed: { current: boolean } }) {
     const selfHidden = target.visible === false
     if (selfHidden) target.visible = true
 
-    try { gl.compileAsync(scene, camera, target).catch(() => {}) } catch {}
+    try { gl.compileAsync(scene, camera).catch(() => {}) } catch {}
 
     // Restored synchronously, before the renderer ever gets a chance to draw a frame.
     if (selfHidden) target.visible = false
