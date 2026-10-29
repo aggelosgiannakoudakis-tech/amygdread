@@ -36,14 +36,20 @@ export default function SpecimenRoom() {
     const gr = g.current; if (!gr) return
     const w = warnW(), arm = warnArm(w), B = warnB(w)
     const introVal = coarse ? 3.5 : introT()
-    const base = sm(1, 3.5, introVal) * (1 - sm(0.55, 0.8, P.value)), vis = Math.max(base, 0.22 * arm); gr.visible = vis > 0.003; if (!gr.visible) return
+    const base = sm(1, 3.5, introVal) * (1 - sm(0.55, 0.8, P.value)), vis = Math.max(base, 0.22 * arm)
+    // Kept permanently visible on purpose: toggling Object3D.visible changes Three.js's
+    // active light count scene-wide, which forces every lit material (including the
+    // brain's) to synchronously recompile its shader program the instant this flips -
+    // that was the Threat Response freeze. Hidden via opacity/intensity instead (same
+    // approach RoomWorlds already uses), so the result looks 100% identical.
+    gr.visible = true
     const sv = SPEC.v !== seen.current; if (sv) seen.current = SPEC.v
     if (!mats.current.length || sv) gr.traverse((m: any) => { if (m.isMesh) { const ms = Array.isArray(m.material) ? m.material : [m.material]; ms.forEach((q: THREE.Material) => { if (!mats.current.includes(q)) { q.userData.b = q.opacity; q.transparent = true; q.needsUpdate = true; mats.current.push(q) } }) } else if (m.isLight && !lights.current.some((x) => x.l === m)) lights.current.push({ l: m, i: m.intensity }) })
     const specRev = sm(4, 8, introT()); mats.current.forEach((q) => { q.opacity = q.userData.b * vis * (q.userData.spec ? specRev : 1) }); lights.current.forEach((x) => { const c = (x.l as THREE.PointLight).color, red = !!c && c.r > 0.9 && c.g < 0.3; x.l.intensity = red ? x.i * (base * (0.8 + (P.reduced ? 0 : 0.2 * Math.sin(clock.elapsedTime * 1.1))) + arm * B * 5) : x.i * vis * (x.l.type === 'PointLight' && !P.reduced ? 0.8 + 0.2 * Math.sin(clock.elapsedTime * 1.1) : 1) })
     reds.current.forEach((m, i) => { (m.material as THREE.MeshBasicMaterial).opacity = Math.min(1, base * (0.55 + 0.35 * Math.sin(clock.elapsedTime * 1.1 + i)) + arm * B) })
   })
   return (
-    <group ref={g} visible={false}>
+    <group ref={g}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.4, -6]} material={o.floor}><planeGeometry args={[60, 60]} /></mesh>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 7.2, -6]} material={o.wall}><planeGeometry args={[60, 60]} /></mesh>
       <mesh position={[0, 1.8, -17]} material={o.wall}><planeGeometry args={[44, 15]} /></mesh>
