@@ -75,6 +75,14 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       canvasScene.traverse((o) => {
         if (visMap.has(o)) o.visible = visMap.get(o)!
       })
+      console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length) // <--- PUT IT HERE
+      onReady()
+    }
+
+    const restore = () => {
+      canvasScene.traverse((o) => {
+        if (visMap.has(o)) o.visible = visMap.get(o)!
+      })
       onReady()
     }
 
