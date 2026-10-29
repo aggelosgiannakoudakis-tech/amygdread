@@ -15,44 +15,43 @@ import { LOAD } from '../lib/progress'
 
 const Fx = dynamic(() => import('./Fx'), { ssr: false })
 
-// Same idea as before, but instead of snapshotting scene.children ONCE (which misses
-// anything added later — e.g. RoomWorlds is behind <Suspense>, so its meshes don't exist
-// in the scene graph yet at the moment the brain finishes loading), this keeps rescanning
-// the top-level children every 12 frames forever, tracking what's already been warmed in
-// a WeakSet. Any newly-mounted top-level object (like RoomWorlds resolving its own async
-// load later) gets picked up and warmed the moment it appears, instead of compiling live
-// mid-scroll. Once everything is warmed, the rescan finds nothing new each cycle — a
-// single cheap array iteration, no visual effect, negligible cost.
+// Tracks compiled MATERIALS, not objects, and scans the FULL scene graph (not just the
+// top level) every 12 frames. This catches meshes added deep inside an already-seen
+// group later (e.g. a room's real content mounting after its wrapper group already
+// existed), which the previous top-level-only version could silently miss. To compile
+// a mesh, every ancestor up to the scene root must also be momentarily visible (Three.js
+// skips invisible branches entirely) — so the whole ancestor chain is toggled, not just
+// the mesh itself, then restored synchronously before any frame can render.
 function SceneWarmup({ armed }: { armed: { current: boolean } }) {
   const { gl, scene, camera } = useThree()
-  const warmed = useRef<WeakSet<THREE.Object3D>>(new WeakSet())
-  const pending = useRef<THREE.Object3D[]>([])
+  const warmedMats = useRef<WeakSet<THREE.Material>>(new WeakSet())
   const wait = useRef(0)
 
   useFrame(() => {
     if (!armed.current) return
     if (wait.current++ % 12 !== 0) return
 
-    if (pending.current.length === 0) {
-      for (const child of scene.children) {
-        if (!warmed.current.has(child)) pending.current.push(child)
-      }
-      if (pending.current.length === 0) return
-    }
+    let found: THREE.Object3D | null = null
+    scene.traverse((o) => {
+      if (found) return
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+      if (!mat) return
+      const list = Array.isArray(mat) ? mat : [mat]
+      if (list.some((m) => m && !warmedMats.current.has(m))) found = o
+    })
+    if (!found) return
 
-    const target = pending.current.shift()
-    if (!target) return
-    warmed.current.add(target)
+    const mat = (found as THREE.Mesh).material as THREE.Material | THREE.Material[]
+    const list = Array.isArray(mat) ? mat : [mat]
+    list.forEach((m) => m && warmedMats.current.add(m))
 
-    const hidden: THREE.Object3D[] = []
-    target.traverse((o) => { if (o.visible === false) { hidden.push(o); o.visible = true } })
-    const selfHidden = target.visible === false
-    if (selfHidden) target.visible = true
+    const touched: THREE.Object3D[] = []
+    let n: THREE.Object3D | null = found
+    while (n) { if (n.visible === false) { touched.push(n); n.visible = true } n = n.parent }
 
     try { gl.compileAsync(scene, camera).catch(() => {}) } catch {}
 
-    if (selfHidden) target.visible = false
-    for (const o of hidden) o.visible = false
+    for (const o of touched) o.visible = false
   })
 
   return null
