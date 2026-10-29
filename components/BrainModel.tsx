@@ -57,14 +57,11 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     if (warmed.current) { onReady(); return }
     warmed.current = true
 
-    // An all-seeing camera for compilation so Three.js's internal frustum culling
-    // does not skip the inner anatomy (amygdala, vessels, tracts) or rooms:
     const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
     warmCam.position.set(0, 0, 25)
     warmCam.lookAt(0, 0, 0)
     warmCam.updateMatrixWorld()
 
-    // Ensure all objects in the scene graph are marked visible during compile:
     const visMap = new Map<THREE.Object3D, boolean>()
     canvasScene.traverse((o) => {
       visMap.set(o, o.visible)
@@ -75,20 +72,11 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       canvasScene.traverse((o) => {
         if (visMap.has(o)) o.visible = visMap.get(o)!
       })
-      console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length) // <--- PUT IT HERE
-      onReady()
-    }
-
-    const restore = () => {
-      canvasScene.traverse((o) => {
-        if (visMap.has(o)) o.visible = visMap.get(o)!
-      })
+      console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length)
       onReady()
     }
 
     try {
-      // Compiles the entire canvas scene graph (with its real 23 lights, environment,
-      // fog, and all brain pieces) behind the loading screen:
       gl.compileAsync(canvasScene, warmCam).then(restore).catch(restore)
     } catch {
       restore()
