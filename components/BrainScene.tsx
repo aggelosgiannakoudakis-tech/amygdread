@@ -15,31 +15,34 @@ import { LOAD } from '../lib/progress'
 
 const Fx = dynamic(() => import('./Fx'), { ssr: false })
 
-// Three.js's compile()/compileAsync() walk the scene with traverseVisible(), so any object
-// that is currently visible=false (the rooms, specimen room, anything not scrolled to yet)
-// is skipped entirely and never gets its shaders compiled. Those shaders then compile for
-// the first time at the exact moment the object becomes visible mid-scroll, which profiling
-// measured as a ~3.3s main-thread stall (getProgramParameter / link-status wait).
-//
-// This walks the scene one top-level child at a time, briefly marks that subtree visible,
-// compiles the whole scene (already-compiled materials are cache hits and cost ~nothing),
-// then restores every visibility flag — all inside one synchronous block, so no frame can
-// ever be painted while something is temporarily visible. Spreading it one child per 12
-// frames keeps each compile small instead of one long freeze.
+// Same idea as before, but instead of snapshotting scene.children ONCE (which misses
+// anything added later — e.g. RoomWorlds is behind <Suspense>, so its meshes don't exist
+// in the scene graph yet at the moment the brain finishes loading), this keeps rescanning
+// the top-level children every 12 frames forever, tracking what's already been warmed in
+// a WeakSet. Any newly-mounted top-level object (like RoomWorlds resolving its own async
+// load later) gets picked up and warmed the moment it appears, instead of compiling live
+// mid-scroll. Once everything is warmed, the rescan finds nothing new each cycle — a
+// single cheap array iteration, no visual effect, negligible cost.
 function SceneWarmup({ armed }: { armed: { current: boolean } }) {
   const { gl, scene, camera } = useThree()
-  const queue = useRef<THREE.Object3D[] | null>(null)
-  const i = useRef(0)
+  const warmed = useRef<WeakSet<THREE.Object3D>>(new WeakSet())
+  const pending = useRef<THREE.Object3D[]>([])
   const wait = useRef(0)
 
   useFrame(() => {
     if (!armed.current) return
-    if (queue.current === null) queue.current = [...scene.children]
-    if (i.current >= queue.current.length) return
     if (wait.current++ % 12 !== 0) return
 
-    const target = queue.current[i.current++]
+    if (pending.current.length === 0) {
+      for (const child of scene.children) {
+        if (!warmed.current.has(child)) pending.current.push(child)
+      }
+      if (pending.current.length === 0) return
+    }
+
+    const target = pending.current.shift()
     if (!target) return
+    warmed.current.add(target)
 
     const hidden: THREE.Object3D[] = []
     target.traverse((o) => { if (o.visible === false) { hidden.push(o); o.visible = true } })
@@ -48,7 +51,6 @@ function SceneWarmup({ armed }: { armed: { current: boolean } }) {
 
     try { gl.compileAsync(scene, camera).catch(() => {}) } catch {}
 
-    // Restored synchronously, before the renderer ever gets a chance to draw a frame.
     if (selfHidden) target.visible = false
     for (const o of hidden) o.visible = false
   })
