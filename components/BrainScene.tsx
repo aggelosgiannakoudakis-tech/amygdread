@@ -15,32 +15,6 @@ import { LOAD } from '../lib/progress'
 
 const Fx = dynamic(() => import('./Fx'), { ssr: false })
 
-function BulletproofWarmup() {
-  const { gl, scene, camera } = useThree()
-  const done = useRef(false)
-
-  useFrame(() => {
-    if (done.current) return
-    done.current = true
-
-    const visMap = new Map<THREE.Object3D, boolean>()
-    scene.traverse((o) => {
-      visMap.set(o, o.visible)
-      o.visible = true
-    })
-
-    try {
-      gl.compile(scene, camera)
-    } catch {}
-
-    scene.traverse((o) => {
-      if (visMap.has(o)) o.visible = visMap.get(o)!
-    })
-  })
-
-  return null
-}
-
 function ProgramMonitor() {
   const { gl } = useThree()
   const prev = useRef(0)
@@ -76,7 +50,6 @@ export default function BrainScene({ onReady }: { onReady: () => void }) {
       <Suspense fallback={null}><BrainModel onReady={onReady} /></Suspense>
       <Suspense fallback={null}><Wordmark3D /></Suspense>
       <CameraRig /><Lights /><Dust count={coarse ? 130 : 460} /><LabelDriver /><SpecimenRoom /><Suspense fallback={null}><RoomWorlds /></Suspense>
-      <BulletproofWarmup />
       <ProgramMonitor />
       {!coarse && <Fx />}
     </Canvas>

@@ -27,8 +27,8 @@ function makeMaterials() {
 type Rig = { pieces: Piece[]; center: THREE.Vector3; size: number }
 
 export default function BrainModel({ onReady }: { onReady: () => void }) {
-  const { scene } = useGLTF('/models/brain.glb', '/draco/')
-  const { gl, camera } = useThree()
+  const { scene: gltfScene } = useGLTF('/models/brain.glb', '/draco/')
+  const { gl, scene: canvasScene } = useThree()
   const group = useRef<THREE.Group>(null)
   const smooth = useRef({ x: 0, y: 0 })
   const mats = useMemo(makeMaterials, [])
@@ -36,7 +36,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const builder = useRef<PieceBuilder | null>(null)
   const warmed = useRef(false)
 
-  useEffect(() => { builder.current = new PieceBuilder(scene); setRig(null) }, [scene])
+  useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
   useFrame(() => {
     const b = builder.current
@@ -56,15 +56,36 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     S.norm = { c: rig.center, s: TARGET / rig.size }
     if (warmed.current) { onReady(); return }
     warmed.current = true
-    // Compiles the brain's shader programs now, while still hidden behind the loading
-    // screen, instead of letting them compile for the first time the instant the brain
-    // is drawn on screen. Confirmed via Chrome Performance profiling: that lazy first
-    // compile (getProgramParameter / link-status checks) was a ~3s main-thread stall
-    // happening exactly when the brain became visible — the "dull then pops to color"
-    // freeze. No visual change — onReady still fires once, just after compiling
-    // finishes instead of before it.
-    gl.compileAsync(scene, camera).then(onReady).catch(onReady)
-  }, [rig, onReady, gl, camera, scene])
+
+    // An all-seeing camera for compilation so Three.js's internal frustum culling
+    // does not skip the inner anatomy (amygdala, vessels, tracts) or rooms:
+    const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
+    warmCam.position.set(0, 0, 25)
+    warmCam.lookAt(0, 0, 0)
+    warmCam.updateMatrixWorld()
+
+    // Ensure all objects in the scene graph are marked visible during compile:
+    const visMap = new Map<THREE.Object3D, boolean>()
+    canvasScene.traverse((o) => {
+      visMap.set(o, o.visible)
+      o.visible = true
+    })
+
+    const restore = () => {
+      canvasScene.traverse((o) => {
+        if (visMap.has(o)) o.visible = visMap.get(o)!
+      })
+      onReady()
+    }
+
+    try {
+      // Compiles the entire canvas scene graph (with its real 23 lights, environment,
+      // fog, and all brain pieces) behind the loading screen:
+      gl.compileAsync(canvasScene, warmCam).then(restore).catch(restore)
+    } catch {
+      restore()
+    }
+  }, [rig, onReady, gl, canvasScene])
 
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
@@ -107,7 +128,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   return (
     <group ref={group}>
       <group scale={s} position={[-rig.center.x * s, -rig.center.y * s, -rig.center.z * s]}>
-        <primitive object={scene} />
+        <primitive object={gltfScene} />
       </group>
     </group>
   )
