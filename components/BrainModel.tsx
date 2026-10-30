@@ -55,11 +55,11 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   // variant of every material in the real canvas scene, ahead of when they're
   // actually needed. Uses compileAsync (NOT compile) deliberately - the sync
   // gl.compile() forces the driver to finish + link-check every program
-  // immediately, blocking the main thread for the whole pass (this itself was
-  // measured as a ~450ms Long Task when WARMUP2 fired near Threat Response).
-  // compileAsync uses the parallel-shader-compile path and does not block the
-  // same way, while still warming the same two shader variants.
-  const compileBoth = async (tag: string) => {
+  // immediately, blocking the main thread for the whole pass (measured as a
+  // ~450ms Long Task when it fired near Threat Response). compileAsync uses the
+  // parallel-shader-compile path and does not block the same way, while still
+  // warming the same two shader variants.
+  const compileBoth = async () => {
     const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
     warmCam.position.set(0, 0, 25)
     warmCam.lookAt(0, 0, 0)
@@ -92,8 +92,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     canvasScene.traverse((o) => {
       if (visMap.has(o)) o.visible = visMap.get(o)!
     })
-
-    console.log(`[${tag}] programs after compile:`, (gl.info as any)?.programs?.length)
   }
 
   useEffect(() => {
@@ -102,19 +100,18 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     S.norm = { c: rig.center, s: TARGET / rig.size }
     if (warmed.current) { onReady(); return }
     warmed.current = true
-    compileBoth('WARMUP DONE')
+    compileBoth()
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
 
-  // Second, predictive re-warm: refires the same dual-variant compile much closer to
-  // the moment it's actually needed (the brain-return fade near the Threat Response
-  // zone), since the very-early page-load warmup appears to not "stick" long enough.
-  // This fires once, well before P.r actually starts moving.
+  // Second, predictive re-warm closer to the moment the variants are actually
+  // needed (the brain-return fade near the Threat Response zone), since the
+  // page-load warmup alone did not reliably persist that long. Fires once.
   useFrame(() => {
     if (warmed2.current || !rig || !warmed.current) return
     if (P.value > 0.78) {
       warmed2.current = true
-      compileBoth('WARMUP2 DONE')
+      compileBoth()
     }
   })
 
@@ -128,9 +125,13 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   useFrame((state) => {
     const g = group.current; if (!g || !rig) return
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
-    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }); console.log('[FADE FLIP]', performance.now().toFixed(0) + 'ms', 'fade=', fade.toFixed(3)) }
+    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
-    if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { pc.mesh.getWorldPosition(wp); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
+    // Reads matrixWorld directly instead of getWorldPosition(), which internally
+    // calls updateWorldMatrix() and re-walks/recomputes the whole parent chain for
+    // every piece, every frame. The renderer already produced these matrices last
+    // frame, so the values are identical - this just stops recomputing them.
+    if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
     const settle = sstep(0.3, 0.6, p), live = 1 - settle
     g.rotation.y = (0.4 - 0.25 * p + (red ? 0 : Math.sin(t * 0.05) * 0.05 + smooth.current.x * 0.03)) * live
