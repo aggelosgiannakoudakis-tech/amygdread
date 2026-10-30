@@ -37,6 +37,26 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const warmed = useRef(false)
   const warmed2 = useRef(false)
 
+  // Dedicated, PERMANENT warm-up objects for the brain's shared "organic110-0.12"
+  // material shape - one opaque, one transparent. Parked far outside the camera's
+  // far plane (60) so they are frustum-culled every frame and never visible, never
+  // cost a draw call, and are never touched again after creation. Previously we
+  // warmed the two shader variants by mutating the REAL brain materials'
+  // .transparent/.needsUpdate, awaiting compileAsync, then reverting - but since
+  // compileAsync yields across real animation frames, the live, on-screen brain
+  // pieces were briefly rendered in that forced intermediate state at the same time
+  // the normal per-frame fade logic was also writing to those same materials,
+  // occasionally producing visibly broken/white patches on the brain. Using separate
+  // static ghost objects means warmup NEVER touches the real materials' state.
+  const ghost = useMemo(() => {
+    const geo = new THREE.SphereGeometry(0.01, 4, 4)
+    const opaque = mk({ color: '#977872' })
+    const transparent = mk({ color: '#977872' })
+    transparent.transparent = true
+    transparent.depthWrite = false
+    return { geo, opaque, transparent }
+  }, [])
+
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
   useFrame(() => {
@@ -51,14 +71,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  // Dual-pass predictive warmup: compiles both the opaque AND transparent shader
-  // variant of every material in the real canvas scene, ahead of when they're
-  // actually needed. Uses compileAsync (NOT compile) deliberately - the sync
-  // gl.compile() forces the driver to finish + link-check every program
-  // immediately, blocking the main thread for the whole pass (measured as a
-  // ~450ms Long Task when it fired near Threat Response). compileAsync uses the
-  // parallel-shader-compile path and does not block the same way, while still
-  // warming the same two shader variants.
   const compileBoth = async () => {
     const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
     warmCam.position.set(0, 0, 25)
@@ -71,23 +83,14 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
-    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as any[]
-    const snap = allBrainMats.map((m) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
-
     try {
-      await gl.compileAsync(canvasScene, warmCam) // opaque variant
-      allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
-      await gl.compileAsync(canvasScene, warmCam) // transparent variant
+      // Both the opaque ghost and transparent ghost exist simultaneously as real
+      // objects, so one pass compiles both shader variants. No production material
+      // is read or written here.
+      await gl.compileAsync(canvasScene, warmCam)
     } catch {
       // ignore
     }
-
-    allBrainMats.forEach((m, i) => {
-      m.transparent = snap[i].transparent
-      m.opacity = snap[i].opacity
-      m.depthWrite = snap[i].depthWrite
-      m.needsUpdate = true
-    })
 
     canvasScene.traverse((o) => {
       if (visMap.has(o)) o.visible = visMap.get(o)!
@@ -104,9 +107,8 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
 
-  // Second, predictive re-warm closer to the moment the variants are actually
-  // needed (the brain-return fade near the Threat Response zone), since the
-  // page-load warmup alone did not reliably persist that long. Fires once.
+  // Redundant safety re-warm closer to when it's needed; harmless no-op cost if the
+  // programs are already compiled and resident.
   useFrame(() => {
     if (warmed2.current || !rig || !warmed.current) return
     if (P.value > 0.78) {
@@ -115,7 +117,10 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
+  useEffect(() => () => {
+    mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose())
+    ghost.geo.dispose(); ghost.opaque.dispose(); ghost.transparent.dispose()
+  }, [mats, ghost])
 
   const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
   const q = useMemo(() => new THREE.Quaternion(), [])
@@ -127,10 +132,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
     const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
-    // Reads matrixWorld directly instead of getWorldPosition(), which internally
-    // calls updateWorldMatrix() and re-walks/recomputes the whole parent chain for
-    // every piece, every frame. The renderer already produced these matrices last
-    // frame, so the values are identical - this just stops recomputing them.
     if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
     const settle = sstep(0.3, 0.6, p), live = 1 - settle
@@ -158,10 +159,14 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   if (!rig) return null
   const s = TARGET / rig.size
   return (
-    <group ref={group}>
-      <group scale={s} position={[-rig.center.x * s, -rig.center.y * s, -rig.center.z * s]}>
-        <primitive object={gltfScene} />
+    <>
+      <group ref={group}>
+        <group scale={s} position={[-rig.center.x * s, -rig.center.y * s, -rig.center.z * s]}>
+          <primitive object={gltfScene} />
+        </group>
       </group>
-    </group>
+      <mesh position={[0, 0, -500]} geometry={ghost.geo} material={ghost.opaque} />
+      <mesh position={[0, 0, -500]} geometry={ghost.geo} material={ghost.transparent} />
+    </>
   )
 }
