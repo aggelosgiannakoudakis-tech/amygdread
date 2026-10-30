@@ -51,7 +51,15 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  const compileBoth = (tag: string) => {
+  // Dual-pass predictive warmup: compiles both the opaque AND transparent shader
+  // variant of every material in the real canvas scene, ahead of when they're
+  // actually needed. Uses compileAsync (NOT compile) deliberately - the sync
+  // gl.compile() forces the driver to finish + link-check every program
+  // immediately, blocking the main thread for the whole pass (this itself was
+  // measured as a ~450ms Long Task when WARMUP2 fired near Threat Response).
+  // compileAsync uses the parallel-shader-compile path and does not block the
+  // same way, while still warming the same two shader variants.
+  const compileBoth = async (tag: string) => {
     const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
     warmCam.position.set(0, 0, 25)
     warmCam.lookAt(0, 0, 0)
@@ -67,9 +75,9 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     const snap = allBrainMats.map((m) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
 
     try {
-      gl.compile(canvasScene, warmCam) // opaque variant
+      await gl.compileAsync(canvasScene, warmCam) // opaque variant
       allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
-      gl.compile(canvasScene, warmCam) // transparent variant
+      await gl.compileAsync(canvasScene, warmCam) // transparent variant
     } catch {
       // ignore
     }
@@ -100,10 +108,8 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
 
   // Second, predictive re-warm: refires the same dual-variant compile much closer to
   // the moment it's actually needed (the brain-return fade near the Threat Response
-  // zone), since the very-early page-load warmup appears to not "stick" long enough —
-  // same two organic110-0.12 variants were seen compiling twice in testing, meaning
-  // whatever GPU-side program state the first warmup created did not survive until
-  // the real usage moment. This fires once, well before P.r actually starts moving.
+  // zone), since the very-early page-load warmup appears to not "stick" long enough.
+  // This fires once, well before P.r actually starts moving.
   useFrame(() => {
     if (warmed2.current || !rig || !warmed.current) return
     if (P.value > 0.78) {
