@@ -35,6 +35,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const [rig, setRig] = useState<Rig | null>(null)
   const builder = useRef<PieceBuilder | null>(null)
   const warmed = useRef(false)
+  const warmed2 = useRef(false)
 
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
@@ -50,13 +51,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  useEffect(() => {
-    if (!rig) return
-    S.pieces = rig.pieces
-    S.norm = { c: rig.center, s: TARGET / rig.size }
-    if (warmed.current) { onReady(); return }
-    warmed.current = true
-
+  const compileBoth = (tag: string) => {
     const warmCam = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
     warmCam.position.set(0, 0, 25)
     warmCam.lookAt(0, 0, 0)
@@ -68,27 +63,18 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
-    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[]
-    // Snapshot each material's real current transparent/opacity/depthWrite (driven every
-    // frame elsewhere by the P.r fade logic) so we can restore the exact real state after.
-    const snap = allBrainMats.map((m: any) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
+    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as any[]
+    const snap = allBrainMats.map((m) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
 
     try {
-      // Pass 1: compile everything in its current (real, opaque-at-load) state.
-      gl.compile(canvasScene, warmCam)
-      // Pass 2: temporarily flip every brain material to transparent=true and compile again.
-      // This is the exact variant the per-frame fade logic below switches ALL 11 brain
-      // materials to later, during the scroll "return" phase that overlaps Threat Response —
-      // without this, that later switch forces a live synchronous recompile of all 11 at
-      // once. This pass is purely a silent GPU warmup: nothing is visible while it runs,
-      // and every material is restored to its correct real value immediately after.
-      allBrainMats.forEach((m: any) => { m.transparent = true; m.needsUpdate = true })
-      gl.compile(canvasScene, warmCam)
+      gl.compile(canvasScene, warmCam) // opaque variant
+      allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
+      gl.compile(canvasScene, warmCam) // transparent variant
     } catch {
       // ignore
     }
 
-    allBrainMats.forEach((m: any, i) => {
+    allBrainMats.forEach((m, i) => {
       m.transparent = snap[i].transparent
       m.opacity = snap[i].opacity
       m.depthWrite = snap[i].depthWrite
@@ -99,9 +85,32 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       if (visMap.has(o)) o.visible = visMap.get(o)!
     })
 
-    console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length)
+    console.log(`[${tag}] programs after compile:`, (gl.info as any)?.programs?.length)
+  }
+
+  useEffect(() => {
+    if (!rig) return
+    S.pieces = rig.pieces
+    S.norm = { c: rig.center, s: TARGET / rig.size }
+    if (warmed.current) { onReady(); return }
+    warmed.current = true
+    compileBoth('WARMUP DONE')
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
+
+  // Second, predictive re-warm: refires the same dual-variant compile much closer to
+  // the moment it's actually needed (the brain-return fade near the Threat Response
+  // zone), since the very-early page-load warmup appears to not "stick" long enough —
+  // same two organic110-0.12 variants were seen compiling twice in testing, meaning
+  // whatever GPU-side program state the first warmup created did not survive until
+  // the real usage moment. This fires once, well before P.r actually starts moving.
+  useFrame(() => {
+    if (warmed2.current || !rig || !warmed.current) return
+    if (P.value > 0.78) {
+      warmed2.current = true
+      compileBoth('WARMUP2 DONE')
+    }
+  })
 
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
