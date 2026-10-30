@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { S, SPEC } from '../lib/progress'
 
@@ -12,6 +12,8 @@ const tag = (a: string, b: string) => { const c = document.createElement('canvas
 
 export default function Specimens() {
   const [g, setG] = useState<G | null>(null)
+  const { gl, scene, camera } = useThree()
+  const warmedSpec = useRef(false)
   const job = useRef<null | { list: typeof S.pieces; i: number; cells: Map<number, number>; sx: number[]; sy: number[]; sz: number[]; n: number[]; idx: number[] }>(null)
   const m = useMemo(() => { const mm = ({
     glass: new THREE.MeshPhysicalMaterial({ color: '#c8d6d8', transparent: true, opacity: 0.18, roughness: 0.04, clearcoat: 1, side: THREE.FrontSide, depthWrite: false, fog: false }),
@@ -23,7 +25,21 @@ export default function Specimens() {
     a2: new THREE.MeshBasicMaterial({ map: tag('SPECIMEN A-02', 'PRESERVED'), fog: false }), b7: new THREE.MeshBasicMaterial({ map: tag('B-07', 'INTEGRITY: 81%'), fog: false }), c11: new THREE.MeshBasicMaterial({ map: tag('C-11', 'UNCLASSIFIED'), fog: false }), d3: new THREE.MeshBasicMaterial({ map: tag('D-03', 'SEALED'), fog: false }),
   }); Object.values(mm).forEach((x: any) => { x.userData.spec = true }); return mm }, [])
   useFrame(() => {
-    if (g || !S.norm || !S.pieces.length) return
+    // Specimen geometry ('g') finishes building asynchronously, after which point
+    // SpecimenRoom's own traversal effect will set needsUpdate=true on these flesh
+    // materials the first time it sees them — if their shader hasn't been compiled
+    // yet, that forces a synchronous live recompile mid-scroll (this was the second
+    // Threat Response freeze, separate from the brain's). Warming them here, the
+    // moment the geometry (and therefore the real meshes) exist, lets that later
+    // needsUpdate just reuse an already-compiled program instead of building one live.
+    if (g) {
+      if (!warmedSpec.current) {
+        warmedSpec.current = true
+        try { gl.compile(scene, camera) } catch {}
+      }
+      return
+    }
+    if (!S.norm || !S.pieces.length) return
     const j = (job.current ??= { list: S.pieces.filter((p) => p.layer === 'cortex' || p.layer === 'cerebellum'), i: 0, cells: new Map(), sx: [] as number[], sy: [] as number[], sz: [] as number[], n: [] as number[], idx: [] as number[] }), N = S.norm, v = new THREE.Vector3()
     for (let c = 0; c < 2 && j.i < j.list.length; c++, j.i++) {
       const pc = j.list[j.i], geo = pc.mesh.geometry, pos = geo.attributes.position, ix = geo.index, cellOf = new Int32Array(pos.count)
