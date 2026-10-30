@@ -33,6 +33,25 @@ function ProgramMonitor() {
   return null
 }
 
+function LightMonitor() {
+  const { scene } = useThree()
+  const prev = useRef(-1)
+  useFrame(() => {
+    let n = 0
+    const walk = (o: THREE.Object3D, parentVisible: boolean) => {
+      const vis = parentVisible && o.visible
+      if (vis && (o as any).isLight) n++
+      for (const c of o.children) walk(c, vis)
+    }
+    walk(scene, true)
+    if (n !== prev.current) {
+      console.log('[LIGHT COUNT]', performance.now().toFixed(0) + 'ms', prev.current, '->', n)
+      prev.current = n
+    }
+  })
+  return null
+}
+
 export default function BrainScene({ onReady }: { onReady: () => void }) {
   const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
   return (
@@ -51,6 +70,7 @@ export default function BrainScene({ onReady }: { onReady: () => void }) {
       <Suspense fallback={null}><Wordmark3D /></Suspense>
       <CameraRig /><Lights /><Dust count={coarse ? 130 : 460} /><LabelDriver /><SpecimenRoom /><Suspense fallback={null}><RoomWorlds /></Suspense>
       <ProgramMonitor />
+      <LightMonitor />
       {!coarse && <Fx />}
     </Canvas>
   )
