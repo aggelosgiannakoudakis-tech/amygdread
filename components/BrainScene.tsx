@@ -52,6 +52,26 @@ function LightMonitor() {
   return null
 }
 
+function EnvMonitor() {
+  const { scene, gl } = useThree()
+  const prev = useRef<string | null>(null)
+  useFrame(() => {
+    const snap = {
+      env: (scene.environment as any)?.uuid ?? null,
+      envIntensity: (scene as any).environmentIntensity ?? null,
+      fog: scene.fog ? (scene.fog as any).density ?? 'fog-present' : null,
+      shadows: gl.shadowMap.enabled,
+      background: (scene.background as any)?.uuid ?? (scene.background ?? null),
+    }
+    const key = JSON.stringify(snap)
+    if (key !== prev.current) {
+      console.log('[ENV STATE]', performance.now().toFixed(0) + 'ms', snap)
+      prev.current = key
+    }
+  })
+  return null
+}
+
 export default function BrainScene({ onReady }: { onReady: () => void }) {
   const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
   return (
@@ -71,6 +91,7 @@ export default function BrainScene({ onReady }: { onReady: () => void }) {
       <CameraRig /><Lights /><Dust count={coarse ? 130 : 460} /><LabelDriver /><SpecimenRoom /><Suspense fallback={null}><RoomWorlds /></Suspense>
       <ProgramMonitor />
       <LightMonitor />
+      <EnvMonitor />
       {!coarse && <Fx />}
     </Canvas>
   )
