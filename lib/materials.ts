@@ -13,6 +13,6 @@ float vn(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + (nz-.5)*.22, .4, 1.);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fres = pow(1. - clamp(dot(normal, normalize(vViewPosition)), 0., 1.), 3.); totalEmissiveRadiance += vec3(.1,.035,.03) * fres * .35;')
   }
-  m.customProgramCacheKey = () => `organic${k}-${amp}`
+  m.customProgramCacheKey = () => `organic${k}-${amp}-${m.uuid}`
   return m
 }

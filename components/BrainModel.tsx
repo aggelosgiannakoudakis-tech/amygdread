@@ -35,7 +35,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const [rig, setRig] = useState<Rig | null>(null)
   const builder = useRef<PieceBuilder | null>(null)
   const warmed = useRef(false)
-  const warmed2 = useRef(false)
 
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
@@ -69,54 +68,19 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
-    const restore = () => {
-      canvasScene.traverse((o) => {
-        if (visMap.has(o)) o.visible = visMap.get(o)!
-      })
-      console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length)
-      onReady()
-    }
-
     try {
-      gl.compileAsync(canvasScene, warmCam).then(restore).catch(restore)
+      gl.compile(canvasScene, warmCam)
     } catch {
-      restore()
+      // compile fallback
     }
+
+    canvasScene.traverse((o) => {
+      if (visMap.has(o)) o.visible = visMap.get(o)!
+    })
+
+    console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length)
+    onReady()
   }, [rig, onReady, gl, canvasScene])
-
-  // SECOND, SILENT pre-compile pass: fires once, a little before the Threat Response
-  // sequence actually becomes visible (S.remaining < 0.4 vs the 0.3 threshold the real
-  // warning uses), while everything driven by it is still at 0 opacity/intensity — so
-  // there is nothing on screen to change. This bakes in whatever renderer-state shader
-  // variant Threat Response needs, ahead of time, without us having to know exactly
-  // which internal flag causes it.
-  useFrame(() => {
-    if (warmed2.current || !rig) return
-    if (P.value > 0.85 && S.remaining < 0.4) {
-      warmed2.current = true
-      const warmCam2 = new THREE.PerspectiveCamera(175, 1, 0.001, 10000)
-      warmCam2.position.set(0, 0, 25)
-      warmCam2.lookAt(0, 0, 0)
-      warmCam2.updateMatrixWorld()
-
-      const visMap2 = new Map<THREE.Object3D, boolean>()
-      canvasScene.traverse((o) => {
-        visMap2.set(o, o.visible)
-        o.visible = true
-      })
-      const restore2 = () => {
-        canvasScene.traverse((o) => {
-          if (visMap2.has(o)) o.visible = visMap2.get(o)!
-        })
-        console.log('[WARMUP2 DONE] programs after second compile:', (gl.info as any)?.programs?.length)
-      }
-      try {
-        gl.compileAsync(canvasScene, warmCam2).then(restore2).catch(restore2)
-      } catch {
-        restore2()
-      }
-    }
-  })
 
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
