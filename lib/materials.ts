@@ -2,7 +2,6 @@ import * as THREE from 'three'
 // Gentle, LOW-frequency tonal + roughness variation only. (The earlier version perturbed normals from screen-space derivatives of high-frequency noise and
 // multiplied colour by thresholded noise: both read as black speckle. Removed.)
 export function organic<T extends THREE.MeshPhysicalMaterial>(m: T, k = 110, amp = 0.12): T {
-  console.log('[ORGANIC MAT CREATED]', performance.now().toFixed(0) + 'ms', m.uuid)
   m.onBeforeCompile = (s) => {
     s.uniforms.uK = { value: k }
     s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvP = position;')
@@ -14,6 +13,6 @@ float vn(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + (nz-.5)*.22, .4, 1.);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fres = pow(1. - clamp(dot(normal, normalize(vViewPosition)), 0., 1.), 3.); totalEmissiveRadiance += vec3(.1,.035,.03) * fres * .35;')
   }
-  m.customProgramCacheKey = () => `organic${k}-${amp}-${m.uuid}`
+  m.customProgramCacheKey = () => `organic${k}-${amp}`
   return m
 }
