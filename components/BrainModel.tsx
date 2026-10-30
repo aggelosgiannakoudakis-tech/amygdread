@@ -68,11 +68,32 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
+    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[]
+    // Snapshot each material's real current transparent/opacity/depthWrite (driven every
+    // frame elsewhere by the P.r fade logic) so we can restore the exact real state after.
+    const snap = allBrainMats.map((m: any) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
+
     try {
+      // Pass 1: compile everything in its current (real, opaque-at-load) state.
+      gl.compile(canvasScene, warmCam)
+      // Pass 2: temporarily flip every brain material to transparent=true and compile again.
+      // This is the exact variant the per-frame fade logic below switches ALL 11 brain
+      // materials to later, during the scroll "return" phase that overlaps Threat Response —
+      // without this, that later switch forces a live synchronous recompile of all 11 at
+      // once. This pass is purely a silent GPU warmup: nothing is visible while it runs,
+      // and every material is restored to its correct real value immediately after.
+      allBrainMats.forEach((m: any) => { m.transparent = true; m.needsUpdate = true })
       gl.compile(canvasScene, warmCam)
     } catch {
-      // compile fallback
+      // ignore
     }
+
+    allBrainMats.forEach((m: any, i) => {
+      m.transparent = snap[i].transparent
+      m.opacity = snap[i].opacity
+      m.depthWrite = snap[i].depthWrite
+      m.needsUpdate = true
+    })
 
     canvasScene.traverse((o) => {
       if (visMap.has(o)) o.visible = visMap.get(o)!
@@ -80,7 +101,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
 
     console.log('[WARMUP DONE] programs after compile:', (gl.info as any)?.programs?.length)
     onReady()
-  }, [rig, onReady, gl, canvasScene])
+  }, [rig, onReady, gl, canvasScene, mats])
 
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
@@ -92,7 +113,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   useFrame((state) => {
     const g = group.current; if (!g || !rig) return
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
-    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) }
+    const fade = 1 - sstep(0, 0.1, P.r); if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }); console.log('[FADE FLIP]', performance.now().toFixed(0) + 'ms', 'fade=', fade.toFixed(3)) }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
     if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { pc.mesh.getWorldPosition(wp); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
