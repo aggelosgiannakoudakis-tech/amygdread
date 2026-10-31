@@ -72,6 +72,11 @@ export class PieceBuilder {
         const size = this.size, center = this.center
         const rad = mesh.geometry.boundingBox!.getSize(new THREE.Vector3()).length() / size
         mesh.geometry.translate(-c.x, -c.y, -c.z); mesh.geometry.computeBoundingSphere(); mesh.geometry.computeBoundingBox()
+        // Pad the culling sphere generously (invisible, only affects the frustum-cull test below,
+        // never rendering) so a piece never gets culled until it's comfortably off-screen — avoids
+        // any risk of a visible "pop" at the frustum edge while still letting pieces that have
+        // genuinely flown far out of view get skipped by the GPU.
+        mesh.geometry.boundingSphere!.radius *= 2
         mesh.position.copy(c); mesh.matrixAutoUpdate = true
         const k = mesh.name
         const h = hash(k, 1), h2 = hash(k, 2), h3 = hash(k, 3), h4 = hash(k, 4), h5 = hash(k, 5), h6 = hash(k, 6)

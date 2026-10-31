@@ -47,7 +47,7 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       const { pieces, center, size } = b.result()
       const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
       if (coarse) pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
-      pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m]; p.mesh.frustumCulled = false })
+      pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m] })
       setRig({ pieces, center, size })
     }
   })
