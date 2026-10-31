@@ -9,6 +9,7 @@ const SIZE = { xl: 'text-[clamp(3.6rem,14vw,15rem)] leading-[0.86]', lg: 'text-[
 const ease = (x: number) => 1 - Math.pow(1 - x, 3)
 
 const go = (f: number) => LENIS.inst?.scrollTo(f * (document.documentElement.scrollHeight - innerHeight))
+const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 
 export default function Overlay({ ready }: { ready: boolean }) {
   const credit = useRef<HTMLParagraphElement>(null)
@@ -16,6 +17,7 @@ export default function Overlay({ ready }: { ready: boolean }) {
   const head = useRef<HTMLElement>(null), nav = useRef<HTMLElement>(null), bar = useRef<HTMLDivElement>(null)
   const amygRef = useRef<HTMLAnchorElement>(null)
   const roomsRef = useRef<HTMLButtonElement>(null)
+  const cue = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const els = refs.current.map((el) => (el ? Array.from(el.querySelectorAll<HTMLElement>('.inner')) : []))
@@ -39,6 +41,16 @@ export default function Overlay({ ready }: { ready: boolean }) {
       if (nav.current) nav.current.style.opacity = '1'
       if (credit.current) credit.current.style.opacity = String(sstep(0.9, 1, P.r))
       if (bar.current) bar.current.style.transform = `scaleY(${p})`
+      // Scroll cue: slow opacity breathing loop, fades out as soon as real scrolling begins
+      // (before the brain pieces start trembling/shattering), reappears if scrolled back to 0.
+      if (cue.current) {
+        const t = performance.now() / 1000
+        const pulse = 0.4 + 0.5 * (0.5 + 0.5 * Math.sin(t * 1.6))
+        const visible = 1 - sstep(0.02, 0.08, p)
+        const o = pulse * visible
+        cue.current.style.opacity = String(o)
+        cue.current.style.visibility = o < 0.01 ? 'hidden' : 'visible'
+      }
     }
     gsap.ticker.add(fn); return () => gsap.ticker.remove(fn)
   }, [])
@@ -74,6 +86,12 @@ export default function Overlay({ ready }: { ready: boolean }) {
         <a ref={amygRef} href="#top" className="pointer-events-auto" data-magnetic>Amygdread</a>
         <nav ref={nav} className="pointer-events-auto flex gap-8" style={{ opacity: 1 }}><button ref={roomsRef} data-magnetic>Rooms</button></nav>
       </header>
+      <div ref={cue} className="pointer-events-none absolute bottom-[14%] left-1/2 flex -translate-x-1/2 flex-col items-center gap-3" style={{ opacity: 0, visibility: 'hidden' }}>
+        <svg width="14" height="22" viewBox="0 0 14 22" fill="none" className={`text-bone/50 ${coarse ? 'rotate-180' : ''}`}>
+          <path d="M7 0V20M7 20L1 14M7 20L13 14" stroke="currentColor" strokeWidth="1" />
+        </svg>
+        <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-bone/50">{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
+      </div>
       {overlay.map((it, i) => (
         <div key={i} ref={(el) => { refs.current[i] = el }} className={`absolute ${it.pos} ${it.align ?? ''}`} style={{ opacity: 0, visibility: 'hidden' }}>
           {it.kicker && <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.4em] text-bone/50">{it.kicker}</p>}
