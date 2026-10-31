@@ -45,7 +45,7 @@ export default function Overlay({ ready }: { ready: boolean }) {
       // (before the brain pieces start trembling/shattering), reappears if scrolled back to 0.
       if (cue.current) {
         const t = performance.now() / 1000
-        const pulse = 0.4 + 0.5 * (0.5 + 0.5 * Math.sin(t * 1.6))
+        const pulse = 0.65 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.6))
         const visible = 1 - sstep(0.02, 0.08, p)
         const o = pulse * visible
         cue.current.style.opacity = String(o)
@@ -86,12 +86,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
         <a ref={amygRef} href="#top" className="pointer-events-auto" data-magnetic>Amygdread</a>
         <nav ref={nav} className="pointer-events-auto flex gap-8" style={{ opacity: 1 }}><button ref={roomsRef} data-magnetic>Rooms</button></nav>
       </header>
-      <div ref={cue} className="pointer-events-none absolute bottom-[14%] left-1/2 flex -translate-x-1/2 flex-col items-center gap-3" style={{ opacity: 0, visibility: 'hidden' }}>
-        <svg width="14" height="22" viewBox="0 0 14 22" fill="none" className={`text-bone/50 ${coarse ? 'rotate-180' : ''}`}>
-          <path d="M7 0V20M7 20L1 14M7 20L13 14" stroke="currentColor" strokeWidth="1" />
-        </svg>
-        <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-bone/50">{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
-      </div>
       {overlay.map((it, i) => (
         <div key={i} ref={(el) => { refs.current[i] = el }} className={`absolute ${it.pos} ${it.align ?? ''}`} style={{ opacity: 0, visibility: 'hidden' }}>
           {it.kicker && <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.4em] text-bone/50">{it.kicker}</p>}
@@ -102,6 +96,15 @@ export default function Overlay({ ready }: { ready: boolean }) {
           ))}
         </div>
       ))}
+      {/* Explicit high z-index: this is an absolutely-positioned sibling of the overlay text
+          blocks above (including the big AMYGDREAD wordmark), which otherwise paint over it
+          purely due to DOM order since none of these siblings set a z-index. */}
+      <div ref={cue} className="pointer-events-none absolute bottom-[16%] left-1/2 flex -translate-x-1/2 flex-col items-center gap-4" style={{ opacity: 0, visibility: 'hidden', zIndex: 50 }}>
+        <svg width="26" height="40" viewBox="0 0 14 22" fill="none" className={coarse ? 'rotate-180' : ''} style={{ color: '#7dd3fc', filter: 'drop-shadow(0 0 6px rgba(125,211,252,0.7))' }}>
+          <path d="M7 0V20M7 20L1 14M7 20L13 14" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+        <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.5em] text-bone" style={{ textShadow: '0 0 10px rgba(255,255,255,0.4)' }}>{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
+      </div>
       <p ref={credit} style={{ opacity: 0 }} className="site-credit absolute bottom-3 left-[3.5vw] max-w-[60ch] font-mono text-[8px] uppercase leading-relaxed tracking-[0.2em] text-bone/30">© Amygdread · Brain model brain.glb, github.com/itayinbarr/brainproject, CC BY-SA 4.0, modified</p>
       <div className="absolute bottom-0 right-[2vw] top-0 hidden w-px bg-bone/10 md:block"><div ref={bar} className="h-full origin-top bg-blood" style={{ transform: 'scaleY(0)' }} /></div>
     </div>
