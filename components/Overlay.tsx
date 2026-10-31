@@ -44,18 +44,20 @@ export default function Overlay({ ready }: { ready: boolean }) {
   }, [])
 
   // The 3D Canvas (BrainScene.tsx) listens for pointer events via a raw native listener
-  // attached directly to document.body. React's own onClick/stopPropagation runs through a
-  // SEPARATE, higher-level delegated listener that only fires after the native bubble has
-  // already passed through (and been caught by) document.body — too late to stop it. The only
-  // way to truly intercept the click before it ever reaches document.body is to attach a plain
-  // native listener directly on these two elements, which is what this effect does. This does
-  // not change or disable the room click-anywhere behavior anywhere else on the site.
+  // attached directly to document.body, and synthesizes its own "click" from pointerdown/
+  // pointerup pairs rather than relying on the browser's native click event. React's own
+  // onClick/stopPropagation runs through a separate, higher-level delegated listener that
+  // only fires after that raw bubble has already passed through (and been caught by)
+  // document.body — too late to stop it. Attaching plain native listeners directly on these
+  // two elements intercepts pointerdown/pointerup/click before they ever reach document.body.
+  // pointermove is deliberately left alone — blocking it broke CustomCursor's hover/magnetic
+  // tracking for these two links. This does not change room click-anywhere behavior anywhere else.
   useEffect(() => {
     const amyg = amygRef.current, rm = roomsRef.current
     if (!amyg || !rm) return
     const stopAll = (e: Event) => e.stopPropagation()
     const onRoomsClick = (e: Event) => { e.stopPropagation(); go(1) }
-    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'pointerup', 'pointermove', 'click']
+    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'pointerup', 'click']
     types.forEach((t) => amyg.addEventListener(t, stopAll))
     types.forEach((t) => rm.addEventListener(t, stopAll))
     rm.addEventListener('click', onRoomsClick)

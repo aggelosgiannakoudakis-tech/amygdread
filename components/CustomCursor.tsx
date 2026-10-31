@@ -22,9 +22,12 @@ export default function CustomCursor() {
         gsap.to(label.current, { opacity: next === 'room' ? 1 : 0, duration: 0.6 }); if (room) label.current!.textContent = room.dataset.cursor ?? ''
         gsap.to(dot.current, { scale: next === 'room' ? 0 : 1, duration: 0.5 })
       }
-      if (mag && mag !== t) gsap.to(mag, { x: 0, y: 0, duration: 1, ease: 'power3.out' })
+      // slight enlarge on the magnetic element itself while hovered, in addition to the
+      // existing magnetic pull — composes with the x/y tween below via GSAP's own transform
+      // management, so it doesn't fight with it.
+      if (mag && mag !== t) gsap.to(mag, { x: 0, y: 0, scale: 1, duration: 1, ease: 'power3.out' })
       mag = t?.hasAttribute('data-magnetic') ? t : null
-      if (mag) { const r = mag.getBoundingClientRect(); gsap.to(mag, { x: (e.clientX - (r.left + r.width / 2)) * 0.2, y: (e.clientY - (r.top + r.height / 2)) * 0.2, duration: 0.6, ease: 'power3.out' }) }
+      if (mag) { const r = mag.getBoundingClientRect(); gsap.to(mag, { x: (e.clientX - (r.left + r.width / 2)) * 0.2, y: (e.clientY - (r.top + r.height / 2)) * 0.2, scale: 1.12, duration: 0.6, ease: 'power3.out' }) }
     }
     addEventListener('pointermove', move, { passive: true })
     return () => { removeEventListener('pointermove', move); document.documentElement.classList.remove('has-cursor') }
