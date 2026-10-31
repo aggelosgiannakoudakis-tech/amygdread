@@ -31,8 +31,11 @@ export default function Overlay({ ready }: { ready: boolean }) {
           inner.style.transform = `translate3d(0,${y}%,0)`
         })
       })
-      if (head.current) head.current.style.opacity = String(sstep(0.08, 0.16, p))
-      if (nav.current) nav.current.style.opacity = String(sstep(0.9, 0.97, p))
+      // AMYGDREAD wordmark + Rooms nav are always fully visible from the start (load-in
+      // handled by the parent overlay's own ready-fade below), no longer gated behind
+      // scroll progress thresholds.
+      if (head.current) head.current.style.opacity = '1'
+      if (nav.current) nav.current.style.opacity = '1'
       if (credit.current) credit.current.style.opacity = String(sstep(0.9, 1, P.r))
       if (bar.current) bar.current.style.transform = `scaleY(${p})`
     }
@@ -40,9 +43,9 @@ export default function Overlay({ ready }: { ready: boolean }) {
   }, [])
   return (
     <div className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-[2000ms] delay-[1200ms]" style={{ opacity: ready ? 1 : 0 }}>
-      <header ref={head} style={{ opacity: 0 }} className="absolute left-0 right-0 top-0 flex items-start justify-between px-[3.5vw] pt-6 font-mono text-[10px] uppercase tracking-[0.5em] text-bone/80">
+      <header ref={head} style={{ opacity: 1 }} className="absolute left-0 right-0 top-0 flex items-start justify-between px-[3.5vw] pt-6 font-mono text-[12px] uppercase tracking-[0.5em] text-bone/80">
         <a href="#top" className="pointer-events-auto" data-magnetic>Amygdread</a>
-        <nav ref={nav} className="pointer-events-auto flex gap-8 opacity-0"><button data-magnetic onClick={() => go(1)}>Rooms</button></nav>
+        <nav ref={nav} className="pointer-events-auto flex gap-8" style={{ opacity: 1 }}><button data-magnetic onClick={() => go(1)}>Rooms</button></nav>
       </header>
       {overlay.map((it, i) => (
         <div key={i} ref={(el) => { refs.current[i] = el }} className={`absolute ${it.pos} ${it.align ?? ''}`} style={{ opacity: 0, visibility: 'hidden' }}>
