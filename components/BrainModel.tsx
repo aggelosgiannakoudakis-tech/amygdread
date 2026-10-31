@@ -37,7 +37,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const warmed = useRef(false)
   const warmed2 = useRef(false)
   const warming = useRef(false)
-  const progCount = useRef(0)
 
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
@@ -110,18 +109,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  // DIAGNOSTIC ONLY — reads an integer, does not traverse/allocate. Tells us if a
-  // real GPU program compile is still happening after both warmups are done.
-  useFrame(() => {
-    if (!warmed2.current) return
-    const n = gl.info.programs ? gl.info.programs.length : 0
-    if (progCount.current === 0) progCount.current = n
-    else if (n !== progCount.current) {
-      console.warn('[LATE PROGRAM CHANGE]', progCount.current, '->', n, 'at', performance.now().toFixed(0))
-      progCount.current = n
-    }
-  })
-
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
   const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
@@ -134,7 +121,16 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
     if (!warming.current) {
       const fade = 1 - sstep(0, 0.1, P.r)
-      if (Math.abs(fade - lastFade.current) > 0.002) { lastFade.current = fade; allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = fade >= 0.999 }) }
+      if (Math.abs(fade - lastFade.current) > 0.002) {
+        lastFade.current = fade
+        // depthWrite stays ON through the whole fade (not just once opaque): with dozens
+        // of overlapping fractured brain pieces, disabling depth writes while they're
+        // all semi-transparent makes their blend/sort order ambiguous per-frame, which is
+        // what produced the intermittent white/washed-out patches. Keeping depth writes on
+        // means the nearest piece at each pixel always wins correctly, while opacity still
+        // ramps exactly as before — same fade curve, same timing, same end result.
+        allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = true })
+      }
     }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
     if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
