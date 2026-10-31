@@ -15,7 +15,11 @@ export default function CustomCursor() {
       dx(e.clientX); dy(e.clientY); rx(e.clientX); ry(e.clientY)
       const el = e.target as HTMLElement
       const room = el.closest<HTMLElement>('[data-cursor]'), t = el.closest<HTMLElement>('a,button,[data-magnetic]')
-      const next = t ? 'link' : room ? 'room' : ''
+      // Skip magnetic offset for the header's AMYGDREAD and Rooms links — they sit visually
+      // on top of the room hit-planes, and moving them would misalign their clickable area
+      // with the cursor, letting the room underneath still receive the click.
+      const isHeaderLink = t?.closest('header') !== null
+      const next = t && !isHeaderLink ? 'link' : room ? 'room' : ''
       if (next !== state) {
         state = next
         gsap.to(ring.current, { scale: next === 'room' ? 3.4 : next === 'link' ? 1.8 : 1, duration: 0.9, ease: 'power3.out' })
@@ -23,7 +27,7 @@ export default function CustomCursor() {
         gsap.to(dot.current, { scale: next === 'room' ? 0 : 1, duration: 0.5 })
       }
       if (mag && mag !== t) gsap.to(mag, { x: 0, y: 0, duration: 1, ease: 'power3.out' })
-      mag = t?.hasAttribute('data-magnetic') ? t : null
+      mag = t?.hasAttribute('data-magnetic') && !isHeaderLink ? t : null
       if (mag) { const r = mag.getBoundingClientRect(); gsap.to(mag, { x: (e.clientX - (r.left + r.width / 2)) * 0.2, y: (e.clientY - (r.top + r.height / 2)) * 0.2, duration: 0.6, ease: 'power3.out' }) }
     }
     addEventListener('pointermove', move, { passive: true })
