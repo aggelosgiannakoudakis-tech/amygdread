@@ -36,12 +36,8 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const builder = useRef<PieceBuilder | null>(null)
   const warmed = useRef(false)
   const warmed2 = useRef(false)
-  // True while compileBoth() has deliberately forced the brain materials into a
-  // temporary state (transparent=true) to warm that shader variant. The per-frame
-  // fade logic below MUST NOT touch material.transparent/opacity while this is true,
-  // or the two writers race and the brain can render with visibly missing/white
-  // patches for a frame (confirmed cause of the intermittent glitch).
   const warming = useRef(false)
+  const progCount = useRef(0)
 
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
 
@@ -57,12 +53,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     }
   })
 
-  // Dual-pass predictive warmup: compiles both the opaque AND transparent shader
-  // variant of every material in the real canvas scene, ahead of when they're
-  // actually needed. Uses compileAsync (NOT compile) deliberately - the sync
-  // gl.compile() blocks the main thread for the whole pass (measured as a ~450ms
-  // Long Task). The `warming` flag stops the per-frame fade logic from fighting
-  // over the same materials while this runs across multiple real frames.
   const compileBoth = async () => {
     if (warming.current) return
     warming.current = true
@@ -112,14 +102,23 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
 
-  // Second, predictive re-warm closer to the moment the variants are actually
-  // needed (the brain-return fade near the Threat Response zone), since the
-  // page-load warmup alone did not reliably persist that long. Fires once.
   useFrame(() => {
     if (warmed2.current || !rig || !warmed.current) return
     if (P.value > 0.78) {
       warmed2.current = true
       compileBoth()
+    }
+  })
+
+  // DIAGNOSTIC ONLY — reads an integer, does not traverse/allocate. Tells us if a
+  // real GPU program compile is still happening after both warmups are done.
+  useFrame(() => {
+    if (!warmed2.current) return
+    const n = gl.info.programs ? gl.info.programs.length : 0
+    if (progCount.current === 0) progCount.current = n
+    else if (n !== progCount.current) {
+      console.warn('[LATE PROGRAM CHANGE]', progCount.current, '->', n, 'at', performance.now().toFixed(0))
+      progCount.current = n
     }
   })
 
