@@ -133,7 +133,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       }
     }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
-    if (p > 0.6) { let n = 0; state.camera.getWorldDirection(fd); for (const pc of rig.pieces) { wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position); const d = wp.length(); if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++ } S.remaining += (n / rig.pieces.length - S.remaining) * 0.15 } else S.remaining = 1
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
     const settle = sstep(0.3, 0.6, p), live = 1 - settle
     g.rotation.y = (0.4 - 0.25 * p + (red ? 0 : Math.sin(t * 0.05) * 0.05 + smooth.current.x * 0.03)) * live
@@ -141,20 +140,40 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     g.position.y = 0.22 * live
     g.scale.setScalar(1 + 0.12 * sstep(0.1, 0.5, p))
     const tremAmp = red ? 0 : bell(0.15, 0.28, 0.46, p)
+
+    // Single merged pass: updates each piece's transform (only if it has actually entered its
+    // active window — pieces still sitting at rest never get touched, same as before since their
+    // position/rotation genuinely hasn't changed) and, only when p > 0.6, accumulates the same
+    // camera-visibility count used for S.remaining — previously two full separate loops over every
+    // one of the 436 pieces every frame; this is the same math, same order, same final numbers,
+    // just without iterating/recomputing things that haven't changed yet.
+    const doRemain = p > 0.6
+    let n = 0
+    if (doRemain) state.camera.getWorldDirection(fd)
     for (const pc of rig.pieces) {
-      const u = Math.min(1, Math.max(0, (p - pc.start) / pc.dur))
-      const ease = u * u * u * (u * (6 * u - 15) + 10)
-      const drift = Math.max(0, p - pc.start - pc.dur) * 0.5
-      tmp.copy(pc.dir).multiplyScalar(pc.dist * (ease + drift)).add(pc.home)
-      if (!red) {
-        const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
-        const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
-        if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+      const active = p >= pc.start - 0.1
+      if (active) {
+        const u = Math.min(1, Math.max(0, (p - pc.start) / pc.dur))
+        const ease = u * u * u * (u * (6 * u - 15) + 10)
+        const drift = Math.max(0, p - pc.start - pc.dur) * 0.5
+        tmp.copy(pc.dir).multiplyScalar(pc.dist * (ease + drift)).add(pc.home)
+        if (!red) {
+          const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
+          const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
+          if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+        }
+        pc.mesh.position.copy(tmp)
+        const sp = ease + drift * 0.5
+        e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
       }
-      pc.mesh.position.copy(tmp)
-      const sp = ease + drift * 0.5
-      e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
+      if (doRemain) {
+        wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position)
+        const d = wp.length()
+        if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++
+      }
     }
+    if (doRemain) S.remaining += (n / rig.pieces.length - S.remaining) * 0.15
+    else S.remaining = 1
   })
 
   if (!rig) return null
