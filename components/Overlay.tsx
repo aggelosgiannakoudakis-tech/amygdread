@@ -10,17 +10,13 @@ const ease = (x: number) => 1 - Math.pow(1 - x, 3)
 
 const go = (f: number) => LENIS.inst?.scrollTo(f * (document.documentElement.scrollHeight - innerHeight))
 
-// The 3D Canvas listens for pointer events on document.body (eventSource={document.body} in
-// BrainScene.tsx), so clicks on these header links would otherwise bubble past them to body and
-// also be picked up by the invisible room-entry hit-planes in RoomWorlds.tsx, which raycast purely
-// by cursor position and don't know the header is visually on top. Stopping propagation here keeps
-// these two links doing only what they're supposed to, without changing room-entry behavior anywhere.
-const stop = (e: React.SyntheticEvent) => e.stopPropagation()
-
 export default function Overlay({ ready }: { ready: boolean }) {
   const credit = useRef<HTMLParagraphElement>(null)
   const refs = useRef<(HTMLDivElement | null)[]>([])
   const head = useRef<HTMLElement>(null), nav = useRef<HTMLElement>(null), bar = useRef<HTMLDivElement>(null)
+  const amygRef = useRef<HTMLAnchorElement>(null)
+  const roomsRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     const els = refs.current.map((el) => (el ? Array.from(el.querySelectorAll<HTMLElement>('.inner')) : []))
     const fn = () => {
@@ -39,9 +35,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
           inner.style.transform = `translate3d(0,${y}%,0)`
         })
       })
-      // AMYGDREAD wordmark + Rooms nav are always fully visible from the start (load-in
-      // handled by the parent overlay's own ready-fade below), no longer gated behind
-      // scroll progress thresholds.
       if (head.current) head.current.style.opacity = '1'
       if (nav.current) nav.current.style.opacity = '1'
       if (credit.current) credit.current.style.opacity = String(sstep(0.9, 1, P.r))
@@ -49,11 +42,35 @@ export default function Overlay({ ready }: { ready: boolean }) {
     }
     gsap.ticker.add(fn); return () => gsap.ticker.remove(fn)
   }, [])
+
+  // The 3D Canvas (BrainScene.tsx) listens for pointer events via a raw native listener
+  // attached directly to document.body. React's own onClick/stopPropagation runs through a
+  // SEPARATE, higher-level delegated listener that only fires after the native bubble has
+  // already passed through (and been caught by) document.body — too late to stop it. The only
+  // way to truly intercept the click before it ever reaches document.body is to attach a plain
+  // native listener directly on these two elements, which is what this effect does. This does
+  // not change or disable the room click-anywhere behavior anywhere else on the site.
+  useEffect(() => {
+    const amyg = amygRef.current, rm = roomsRef.current
+    if (!amyg || !rm) return
+    const stopAll = (e: Event) => e.stopPropagation()
+    const onRoomsClick = (e: Event) => { e.stopPropagation(); go(1) }
+    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'pointerup', 'pointermove', 'click']
+    types.forEach((t) => amyg.addEventListener(t, stopAll))
+    types.forEach((t) => rm.addEventListener(t, stopAll))
+    rm.addEventListener('click', onRoomsClick)
+    return () => {
+      types.forEach((t) => amyg.removeEventListener(t, stopAll))
+      types.forEach((t) => rm.removeEventListener(t, stopAll))
+      rm.removeEventListener('click', onRoomsClick)
+    }
+  }, [])
+
   return (
     <div className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-[2000ms] delay-[1200ms]" style={{ opacity: ready ? 1 : 0 }}>
       <header ref={head} style={{ opacity: 1 }} className="absolute left-0 right-0 top-0 flex items-start justify-between px-[3.5vw] pt-6 font-mono text-[12px] uppercase tracking-[0.5em] text-bone/80">
-        <a href="#top" className="pointer-events-auto" data-magnetic onClick={stop} onPointerDown={stop} onPointerUp={stop}>Amygdread</a>
-        <nav ref={nav} className="pointer-events-auto flex gap-8" style={{ opacity: 1 }}><button data-magnetic onClick={(e) => { stop(e); go(1) }} onPointerDown={stop} onPointerUp={stop}>Rooms</button></nav>
+        <a ref={amygRef} href="#top" className="pointer-events-auto" data-magnetic>Amygdread</a>
+        <nav ref={nav} className="pointer-events-auto flex gap-8" style={{ opacity: 1 }}><button ref={roomsRef} data-magnetic>Rooms</button></nav>
       </header>
       {overlay.map((it, i) => (
         <div key={i} ref={(el) => { refs.current[i] = el }} className={`absolute ${it.pos} ${it.align ?? ''}`} style={{ opacity: 0, visibility: 'hidden' }}>
