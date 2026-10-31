@@ -18,6 +18,8 @@ export default function Overlay({ ready }: { ready: boolean }) {
   const amygRef = useRef<HTMLAnchorElement>(null)
   const roomsRef = useRef<HTMLButtonElement>(null)
   const cue = useRef<HTMLDivElement>(null)
+  const cueArrow = useRef<HTMLDivElement>(null)
+  const cueStart = useRef<number | null>(null)
 
   useEffect(() => {
     const els = refs.current.map((el) => (el ? Array.from(el.querySelectorAll<HTMLElement>('.inner')) : []))
@@ -41,15 +43,27 @@ export default function Overlay({ ready }: { ready: boolean }) {
       if (nav.current) nav.current.style.opacity = '1'
       if (credit.current) credit.current.style.opacity = String(sstep(0.9, 1, P.r))
       if (bar.current) bar.current.style.transform = `scaleY(${p})`
-      // Scroll cue: slow opacity breathing loop, fades out as soon as real scrolling begins
-      // (before the brain pieces start trembling/shattering), reappears if scrolled back to 0.
+      // Scroll cue: slow opacity breathing loop. Fade-out is time-based (not purely scroll-based):
+      // once scrolling starts, it holds fully visible for 1s before fading over 0.3s, so a single
+      // small scroll tick doesn't make it vanish instantly. Resets if scrolled back to the very top.
+      const t = performance.now()
+      if (p <= 0.01) cueStart.current = null
+      else if (cueStart.current === null) cueStart.current = t
+      let holdFade = 1
+      if (cueStart.current !== null) {
+        const elapsed = t - cueStart.current
+        holdFade = elapsed < 1000 ? 1 : 1 - clamp((elapsed - 1000) / 300)
+      }
       if (cue.current) {
-        const t = performance.now() / 1000
-        const pulse = 0.65 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.6))
-        const visible = 1 - sstep(0.02, 0.08, p)
-        const o = pulse * visible
+        const tt = t / 1000
+        const pulse = 0.65 + 0.35 * (0.5 + 0.5 * Math.sin(tt * 1.6))
+        const o = pulse * holdFade
         cue.current.style.opacity = String(o)
         cue.current.style.visibility = o < 0.01 ? 'hidden' : 'visible'
+      }
+      if (cueArrow.current && !coarse) {
+        const bob = Math.sin(t / 1000 * 1.8) * 5
+        cueArrow.current.style.transform = `translateY(${bob}px)`
       }
     }
     gsap.ticker.add(fn); return () => gsap.ticker.remove(fn)
@@ -96,13 +110,15 @@ export default function Overlay({ ready }: { ready: boolean }) {
           ))}
         </div>
       ))}
-      {/* Explicit high z-index: this is an absolutely-positioned sibling of the overlay text
-          blocks above (including the big AMYGDREAD wordmark), which otherwise paint over it
-          purely due to DOM order since none of these siblings set a z-index. */}
-      <div ref={cue} className="pointer-events-none absolute bottom-[16%] left-1/2 flex -translate-x-1/2 flex-col items-center gap-4" style={{ opacity: 0, visibility: 'hidden', zIndex: 50 }}>
-        <svg width="26" height="40" viewBox="0 0 14 22" fill="none" className={coarse ? 'rotate-180' : ''} style={{ color: '#7dd3fc', filter: 'drop-shadow(0 0 6px rgba(125,211,252,0.7))' }}>
-          <path d="M7 0V20M7 20L1 14M7 20L13 14" stroke="currentColor" strokeWidth="1.3" />
-        </svg>
+      {/* Explicit high z-index: sits above the overlay text blocks (including the AMYGDREAD
+          wordmark) regardless of DOM order. Position is lower on desktop only (per request) so
+          it clears the wordmark; phone position is unchanged. Arrow bobs on desktop only. */}
+      <div ref={cue} className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-4 ${coarse ? 'bottom-[16%]' : 'bottom-[9%]'}`} style={{ opacity: 0, visibility: 'hidden', zIndex: 50 }}>
+        <div ref={cueArrow}>
+          <svg width="26" height="40" viewBox="0 0 14 22" fill="none" className={coarse ? 'rotate-180' : ''} style={{ color: '#7dd3fc', filter: 'drop-shadow(0 0 6px rgba(125,211,252,0.7))' }}>
+            <path d="M7 0V20M7 20L1 14M7 20L13 14" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </div>
         <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.5em] text-bone" style={{ textShadow: '0 0 10px rgba(255,255,255,0.4)' }}>{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
       </div>
       <p ref={credit} style={{ opacity: 0 }} className="site-credit absolute bottom-3 left-[3.5vw] max-w-[60ch] font-mono text-[8px] uppercase leading-relaxed tracking-[0.2em] text-bone/30">© Amygdread · Brain model brain.glb, github.com/itayinbarr/brainproject, CC BY-SA 4.0, modified</p>
