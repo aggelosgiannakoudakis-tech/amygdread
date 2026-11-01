@@ -20,8 +20,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
   const cue = useRef<HTMLDivElement>(null)
   const cueArrow = useRef<HTMLDivElement>(null)
   const cueStart = useRef<number | null>(null)
-  const fpsTxt = useRef<HTMLSpanElement>(null)
-  const fpsMin = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     const els = refs.current.map((el) => (el ? Array.from(el.querySelectorAll<HTMLElement>('.inner')) : []))
@@ -84,25 +82,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
     }
   }, [])
 
-  // TEMPORARY diagnostic: live fps + lowest fps seen since load. Remove once profiling is done.
-  useEffect(() => {
-    let raf = 0, winStart = performance.now(), frames = 0, min = Infinity
-    const loop = (now: number) => {
-      raf = requestAnimationFrame(loop)
-      frames++
-      const dt = now - winStart
-      if (dt >= 500) {
-        const fps = (frames * 1000) / dt
-        if (fps < min) min = fps
-        if (fpsTxt.current) fpsTxt.current.textContent = String(Math.round(fps))
-        if (fpsMin.current) fpsMin.current.textContent = String(Math.round(min))
-        winStart = now; frames = 0
-      }
-    }
-    raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
-  }, [])
-
   return (
     <div className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-[2000ms] delay-[1200ms]" style={{ opacity: ready ? 1 : 0 }}>
       <header ref={head} style={{ opacity: 1 }} className="absolute left-0 right-0 top-0 flex items-start justify-between px-[3.5vw] pt-6 font-mono text-[12px] uppercase tracking-[0.5em] text-bone/80">
@@ -126,9 +105,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
           </svg>
         </div>
         <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.5em] text-bone" style={{ textShadow: '0 0 10px rgba(255,255,255,0.4)' }}>{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
-      </div>
-      <div className="fixed left-1/2 top-3 z-[70] -translate-x-1/2 rounded bg-black/60 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[#7dd3fc]" style={{ zIndex: 70 }}>
-        fps <span ref={fpsTxt}>--</span> · min <span ref={fpsMin}>--</span>
       </div>
       <p ref={credit} style={{ opacity: 0 }} className="site-credit absolute bottom-3 left-[3.5vw] max-w-[60ch] font-mono text-[8px] uppercase leading-relaxed tracking-[0.2em] text-bone/30">© Amygdread · Brain model brain.glb, github.com/itayinbarr/brainproject, CC BY-SA 4.0, modified</p>
       <div className="absolute bottom-0 right-[2vw] top-0 hidden w-px bg-bone/10 md:block"><div ref={bar} className="h-full origin-top bg-blood" style={{ transform: 'scaleY(0)' }} /></div>

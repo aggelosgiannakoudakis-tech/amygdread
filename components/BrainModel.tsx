@@ -9,7 +9,7 @@ import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
-const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, transparent: true, depthWrite: true, opacity: 1, ...o }))
+const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, transparent: false, depthWrite: true, opacity: 1, ...o }))
 function makeMaterials() {
   const cortex = [0, 1, 2, 3].map((i) => mk({ color: new THREE.Color('#977872').offsetHSL(0, 0, (i - 1.5) * 0.006), sheenColor: new THREE.Color('#a8837b'), sheenRoughness: 0.7 }))
   const sulcus = mk({ color: '#86665f', sheenColor: new THREE.Color('#8f6b64'), sheenRoughness: 0.8 })
@@ -65,11 +65,27 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
+    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as any[]
+
     try {
+      // 1. Warm up opaque pipeline variant
+      allBrainMats.forEach((m) => { m.transparent = false; m.opacity = 1; m.depthWrite = true; m.needsUpdate = true })
+      await gl.compileAsync(canvasScene, warmCam)
+
+      // 2. Warm up transparent pipeline variant
+      allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
       await gl.compileAsync(canvasScene, warmCam)
     } catch {
       // ignore
     }
+
+    // Restore clean default opaque state for start
+    allBrainMats.forEach((m) => {
+      m.transparent = false
+      m.opacity = 1
+      m.depthWrite = true
+      m.needsUpdate = true
+    })
 
     canvasScene.traverse((o) => {
       if (visMap.has(o)) o.visible = visMap.get(o)!
@@ -90,7 +106,9 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
 
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
-  const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
+  const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats])
+  const lastFade = useRef(1)
+  const lastTrans = useRef(false)
   const q = useMemo(() => new THREE.Quaternion(), [])
   const e = useMemo(() => new THREE.Euler(), [])
   const tmp = useMemo(() => new THREE.Vector3(), []), fd = useMemo(() => new THREE.Vector3(), []), wp = useMemo(() => new THREE.Vector3(), [])
@@ -98,14 +116,23 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   useFrame((state) => {
     const g = group.current; if (!g || !rig) return
     g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
+
     if (!warming.current) {
       const fade = 1 - sstep(0, 0.1, P.r)
-      if (Math.abs(fade - lastFade.current) > 0.002) {
+      const isTrans = fade < 0.999
+      if (isTrans !== lastTrans.current || Math.abs(fade - lastFade.current) > 0.002) {
+        lastTrans.current = isTrans
         lastFade.current = fade
-        // Pure uniform scalar update (0ms CPU cost, zero WebGL program switches or pipeline re-compilations)
-        allMats.forEach((m) => { m.opacity = fade })
+        // While fade === 1 (95% of scroll including shatter), transparent = false restores GPU Early-Z culling.
+        // When fade < 0.999 (room transition), transparent = true enables smooth opacity fade.
+        allMats.forEach((m) => {
+          m.transparent = isTrans
+          m.opacity = fade
+          m.depthWrite = true
+        })
       }
     }
+
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
     smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
     const settle = sstep(0.3, 0.6, p), live = 1 - settle
