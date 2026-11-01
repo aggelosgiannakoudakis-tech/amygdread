@@ -20,6 +20,8 @@ export default function Overlay({ ready }: { ready: boolean }) {
   const cue = useRef<HTMLDivElement>(null)
   const cueArrow = useRef<HTMLDivElement>(null)
   const cueStart = useRef<number | null>(null)
+  const fpsTxt = useRef<HTMLSpanElement>(null)
+  const fpsMin = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     const els = refs.current.map((el) => (el ? Array.from(el.querySelectorAll<HTMLElement>('.inner')) : []))
@@ -43,9 +45,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
       if (nav.current) nav.current.style.opacity = '1'
       if (credit.current) credit.current.style.opacity = String(sstep(0.9, 1, P.r))
       if (bar.current) bar.current.style.transform = `scaleY(${p})`
-      // Scroll cue: slow opacity breathing loop. Fade-out is time-based (not purely scroll-based):
-      // once scrolling starts, it holds fully visible for 1s before fading over 0.3s, so a single
-      // small scroll tick doesn't make it vanish instantly. Resets if scrolled back to the very top.
       const t = performance.now()
       if (p <= 0.01) cueStart.current = null
       else if (cueStart.current === null) cueStart.current = t
@@ -69,15 +68,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
     gsap.ticker.add(fn); return () => gsap.ticker.remove(fn)
   }, [])
 
-  // The 3D Canvas (BrainScene.tsx) listens for pointer events via a raw native listener
-  // attached directly to document.body, and synthesizes its own "click" from pointerdown/
-  // pointerup pairs rather than relying on the browser's native click event. React's own
-  // onClick/stopPropagation runs through a separate, higher-level delegated listener that
-  // only fires after that raw bubble has already passed through (and been caught by)
-  // document.body — too late to stop it. Attaching plain native listeners directly on these
-  // two elements intercepts pointerdown/pointerup/click before they ever reach document.body.
-  // pointermove is deliberately left alone — blocking it broke CustomCursor's hover/magnetic
-  // tracking for these two links. This does not change room click-anywhere behavior anywhere else.
   useEffect(() => {
     const amyg = amygRef.current, rm = roomsRef.current
     if (!amyg || !rm) return
@@ -92,6 +82,25 @@ export default function Overlay({ ready }: { ready: boolean }) {
       types.forEach((t) => rm.removeEventListener(t, stopAll))
       rm.removeEventListener('click', onRoomsClick)
     }
+  }, [])
+
+  // TEMPORARY diagnostic: live fps + lowest fps seen since load. Remove once profiling is done.
+  useEffect(() => {
+    let raf = 0, winStart = performance.now(), frames = 0, min = Infinity
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop)
+      frames++
+      const dt = now - winStart
+      if (dt >= 500) {
+        const fps = (frames * 1000) / dt
+        if (fps < min) min = fps
+        if (fpsTxt.current) fpsTxt.current.textContent = String(Math.round(fps))
+        if (fpsMin.current) fpsMin.current.textContent = String(Math.round(min))
+        winStart = now; frames = 0
+      }
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
   }, [])
 
   return (
@@ -110,9 +119,6 @@ export default function Overlay({ ready }: { ready: boolean }) {
           ))}
         </div>
       ))}
-      {/* Explicit high z-index: sits above the overlay text blocks (including the AMYGDREAD
-          wordmark) regardless of DOM order. Position is lower on desktop only (per request) so
-          it clears the wordmark; phone position is unchanged. Arrow bobs on desktop only. */}
       <div ref={cue} className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-4 ${coarse ? 'bottom-[16%]' : 'bottom-[9%]'}`} style={{ opacity: 0, visibility: 'hidden', zIndex: 50 }}>
         <div ref={cueArrow}>
           <svg width="26" height="40" viewBox="0 0 14 22" fill="none" className={coarse ? 'rotate-180' : ''} style={{ color: '#7dd3fc', filter: 'drop-shadow(0 0 6px rgba(125,211,252,0.7))' }}>
@@ -120,6 +126,9 @@ export default function Overlay({ ready }: { ready: boolean }) {
           </svg>
         </div>
         <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.5em] text-bone" style={{ textShadow: '0 0 10px rgba(255,255,255,0.4)' }}>{coarse ? 'Swipe Up' : 'Scroll Down'}</p>
+      </div>
+      <div className="fixed left-1/2 top-3 z-[70] -translate-x-1/2 rounded bg-black/60 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[#7dd3fc]" style={{ zIndex: 70 }}>
+        fps <span ref={fpsTxt}>--</span> · min <span ref={fpsMin}>--</span>
       </div>
       <p ref={credit} style={{ opacity: 0 }} className="site-credit absolute bottom-3 left-[3.5vw] max-w-[60ch] font-mono text-[8px] uppercase leading-relaxed tracking-[0.2em] text-bone/30">© Amygdread · Brain model brain.glb, github.com/itayinbarr/brainproject, CC BY-SA 4.0, modified</p>
       <div className="absolute bottom-0 right-[2vw] top-0 hidden w-px bg-bone/10 md:block"><div ref={bar} className="h-full origin-top bg-blood" style={{ transform: 'scaleY(0)' }} /></div>
