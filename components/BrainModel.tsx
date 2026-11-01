@@ -9,7 +9,7 @@ import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
-const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, ...o }))
+const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, transparent: true, depthWrite: true, opacity: 1, ...o }))
 function makeMaterials() {
   const cortex = [0, 1, 2, 3].map((i) => mk({ color: new THREE.Color('#977872').offsetHSL(0, 0, (i - 1.5) * 0.006), sheenColor: new THREE.Color('#a8837b'), sheenRoughness: 0.7 }))
   const sulcus = mk({ color: '#86665f', sheenColor: new THREE.Color('#8f6b64'), sheenRoughness: 0.8 })
@@ -35,7 +35,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const [rig, setRig] = useState<Rig | null>(null)
   const builder = useRef<PieceBuilder | null>(null)
   const warmed = useRef(false)
-  const warmed2 = useRef(false)
   const warming = useRef(false)
 
   useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
@@ -66,23 +65,11 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       o.visible = true
     })
 
-    const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as any[]
-    const snap = allBrainMats.map((m) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }))
-
     try {
-      await gl.compileAsync(canvasScene, warmCam) // opaque variant
-      allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
-      await gl.compileAsync(canvasScene, warmCam) // transparent variant
+      await gl.compileAsync(canvasScene, warmCam)
     } catch {
       // ignore
     }
-
-    allBrainMats.forEach((m, i) => {
-      m.transparent = snap[i].transparent
-      m.opacity = snap[i].opacity
-      m.depthWrite = snap[i].depthWrite
-      m.needsUpdate = true
-    })
 
     canvasScene.traverse((o) => {
       if (visMap.has(o)) o.visible = visMap.get(o)!
@@ -101,14 +88,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
 
-  useFrame(() => {
-    if (warmed2.current || !rig || !warmed.current) return
-    if (P.value > 0.78) {
-      warmed2.current = true
-      compileBoth()
-    }
-  })
-
   useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
 
   const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats]), lastFade = useRef(1)
@@ -123,13 +102,8 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       const fade = 1 - sstep(0, 0.1, P.r)
       if (Math.abs(fade - lastFade.current) > 0.002) {
         lastFade.current = fade
-        // depthWrite stays ON through the whole fade (not just once opaque): with dozens
-        // of overlapping fractured brain pieces, disabling depth writes while they're
-        // all semi-transparent makes their blend/sort order ambiguous per-frame, which is
-        // what produced the intermittent white/washed-out patches. Keeping depth writes on
-        // means the nearest piece at each pixel always wins correctly, while opacity still
-        // ramps exactly as before — same fade curve, same timing, same end result.
-        allMats.forEach((m) => { m.transparent = fade < 0.999; m.opacity = fade; m.depthWrite = true })
+        // Pure uniform scalar update (0ms CPU cost, zero WebGL program switches or pipeline re-compilations)
+        allMats.forEach((m) => { m.opacity = fade })
       }
     }
     const p = P.value, t = state.clock.elapsedTime, red = P.reduced
@@ -141,12 +115,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     g.scale.setScalar(1 + 0.12 * sstep(0.1, 0.5, p))
     const tremAmp = red ? 0 : bell(0.15, 0.28, 0.46, p)
 
-    // Single merged pass: updates each piece's transform (only if it has actually entered its
-    // active window — pieces still sitting at rest never get touched, same as before since their
-    // position/rotation genuinely hasn't changed) and, only when p > 0.6, accumulates the same
-    // camera-visibility count used for S.remaining — previously two full separate loops over every
-    // one of the 436 pieces every frame; this is the same math, same order, same final numbers,
-    // just without iterating/recomputing things that haven't changed yet.
     const doRemain = p > 0.6
     let n = 0
     if (doRemain) state.camera.getWorldDirection(fd)
