@@ -44,7 +44,7 @@ function Canteen({ onLeave }: { onLeave: () => void }) {
           <div className="grid gap-9">
             <section className="po" style={dl(3)}><h3 className="cn-sec">01 · Date</h3>
               <div className="flex flex-wrap gap-2">{f.days.map((d) => <button key={d.iso} onClick={() => f.setDate(d.iso)} className={`cn-tab ${f.date === d.iso ? 'on' : ''}`}><i className="lamp" /><span>{d.wd}</span><b>{d.n}</b></button>)}</div>
-              <input aria-label="Other date" className="cn-in mt-3 !w-auto" type="date" min={iso(new Date())} value={f.date} onChange={(e) => f.setDate(e.target.value)} />
+              <input aria-label="Other date" className="cn-in mt-3 !w-auto !text-[16px]" type="date" min={iso(new Date())} value={f.date} onChange={(e) => f.setDate(e.target.value)} />
             </section>
             <section className="po" style={dl(5)}><h3 className="cn-sec">02 · Time <em>{status(f)}</em></h3>
               <div className="flex flex-wrap gap-2">{SLOTS.map((s) => <button key={s} disabled={!f.slots.includes(s)} onClick={() => f.setTime(s)} className={`cn-tab ${f.time === s ? 'on' : ''}`}><i className="lamp" /><b>{s}</b></button>)}</div>
@@ -54,8 +54,8 @@ function Canteen({ onLeave }: { onLeave: () => void }) {
               <div className="flex items-stretch gap-3"><button className="cn-btn !px-5 !text-lg" aria-label="Fewer" onClick={() => f.setPeople((p) => Math.max(2, p - 1))}>−</button><div className="cn-dial" aria-live="polite">{f.people}</div><button className="cn-btn !px-5 !text-lg" aria-label="More" onClick={() => f.setPeople((p) => Math.min(6, p + 1))}>+</button></div>
             </section>
             <section className="po grid gap-5 sm:grid-cols-2" style={dl(9)}>
-              <label><span className="cn-sec">Name</span><input className="cn-in" value={f.name} onChange={(e) => f.setName(e.target.value)} autoComplete="name" /></label>
-              <label><span className="cn-sec">Email</span><input className="cn-in" type="email" value={f.email} onChange={(e) => f.setEmail(e.target.value)} autoComplete="email" /></label>
+              <label><span className="cn-sec">Name</span><input className="cn-in !text-[16px]" value={f.name} onChange={(e) => f.setName(e.target.value)} autoComplete="name" /></label>
+              <label><span className="cn-sec">Email</span><input className="cn-in !text-[16px]" type="email" value={f.email} onChange={(e) => f.setEmail(e.target.value)} autoComplete="email" /></label>
             </section>
             <button onClick={f.submit} disabled={!f.valid || f.busy} className="po cn-reserve" style={dl(11)}>{f.busy ? 'Logging…' : 'Reserve'}</button>
           </div>
@@ -103,8 +103,8 @@ function Mother({ onLeave }: { onLeave: () => void }) {
               <div className="flex items-center gap-7"><button className="dm-opt !text-xl" aria-label="Fewer" onClick={() => f.setPeople((p) => Math.max(2, p - 1))}>−</button><span className="font-display text-5xl font-light not-italic text-bone" aria-live="polite">{f.people}</span><button className="dm-opt !text-xl" aria-label="More" onClick={() => f.setPeople((p) => Math.min(6, p + 1))}>+</button></div>
             </section>
             <section className="dm-in grid gap-5" style={dl(15)}>
-              <label><span className="dm-sec">Name</span><input className="dm-in-field" value={f.name} onChange={(e) => f.setName(e.target.value)} autoComplete="name" /></label>
-              <label><span className="dm-sec">Email</span><input className="dm-in-field" type="email" value={f.email} onChange={(e) => f.setEmail(e.target.value)} autoComplete="email" /></label>
+              <label><span className="dm-sec">Name</span><input className="dm-in-field !text-[16px]" value={f.name} onChange={(e) => f.setName(e.target.value)} autoComplete="name" /></label>
+              <label><span className="dm-sec">Email</span><input className="dm-in-field !text-[16px]" type="email" value={f.email} onChange={(e) => f.setEmail(e.target.value)} autoComplete="email" /></label>
             </section>
             <button onClick={f.submit} disabled={!f.valid || f.busy} className="dm-in dm-go" style={dl(17)}>{f.busy ? '…' : 'Reserve'}</button>
           </div>
@@ -113,4 +113,5 @@ function Mother({ onLeave }: { onLeave: () => void }) {
     </div>
   )
 }
+
 export default function Booking({ room, onLeave }: { room: number; onLeave: () => void }) { return room === 0 ? <Canteen onLeave={onLeave} /> : <Mother onLeave={onLeave} /> }
