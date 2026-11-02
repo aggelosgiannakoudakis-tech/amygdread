@@ -9,17 +9,52 @@ import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
-const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.66, clearcoat: 0.1, clearcoatRoughness: 0.5, specularIntensity: 0.45, sheen: 0.2, transparent: false, depthWrite: true, opacity: 1, ...o }))
+const mk = (o: THREE.MeshPhysicalMaterialParameters) =>
+  organic(
+    new THREE.MeshPhysicalMaterial({
+      side: THREE.DoubleSide,
+      roughness: 0.48,
+      clearcoat: 0.92,
+      clearcoatRoughness: 0.07,
+      ior: 1.44,
+      reflectivity: 0.85,
+      specularIntensity: 1.0,
+      specularColor: new THREE.Color('#fff0ed'),
+      sheen: 0.45,
+      sheenRoughness: 0.35,
+      iridescence: 0.12,
+      iridescenceIOR: 1.33,
+      transparent: false,
+      depthWrite: true,
+      opacity: 1,
+      ...o,
+    })
+  )
+
 function makeMaterials() {
-  const cortex = [0, 1, 2, 3].map((i) => mk({ color: new THREE.Color('#977872').offsetHSL(0, 0, (i - 1.5) * 0.006), sheenColor: new THREE.Color('#a8837b'), sheenRoughness: 0.7 }))
-  const sulcus = mk({ color: '#86665f', sheenColor: new THREE.Color('#8f6b64'), sheenRoughness: 0.8 })
+  const cortex = [0, 1, 2, 3].map((i) =>
+    mk({
+      color: new THREE.Color('#8c5e58').offsetHSL((i - 1.5) * 0.004, (i - 1.5) * 0.02, (i - 1.5) * 0.015),
+      sheenColor: new THREE.Color('#c45b52'),
+      sheenRoughness: 0.38,
+    })
+  )
+  // Deep vascular crevices: darker and wetter where fluid pools
+  const sulcus = mk({
+    color: '#4d2624',
+    roughness: 0.52,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.04,
+    sheenColor: new THREE.Color('#7a2824'),
+    sheenRoughness: 0.45,
+  })
   const m: Record<Exclude<Layer, 'hidden' | 'cortex'>, THREE.Material> = {
-    cerebellum: mk({ color: '#8a6c64', roughness: 0.74 }),
-    deep: mk({ color: '#836a63', roughness: 0.55, clearcoat: 0.2 }),
-    tract: mk({ color: '#b5a899', roughness: 0.7 }),
-    vessel: mk({ color: '#5a1520', roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.4 }),
-    nerve: mk({ color: '#b8ad90', roughness: 0.65 }),
-    amygdala: mk({ color: '#8a5650', roughness: 0.6 }),
+    cerebellum: mk({ color: '#784d49', roughness: 0.52, clearcoat: 0.88, clearcoatRoughness: 0.09, sheenColor: new THREE.Color('#b0554c') }),
+    deep: mk({ color: '#6e423e', roughness: 0.42, clearcoat: 0.95, clearcoatRoughness: 0.06, sheenColor: new THREE.Color('#a8443c') }),
+    tract: mk({ color: '#c2b09e', roughness: 0.38, clearcoat: 0.88, clearcoatRoughness: 0.08, sheenColor: new THREE.Color('#ffe8d6') }),
+    vessel: mk({ color: '#4f0912', roughness: 0.24, clearcoat: 1.0, clearcoatRoughness: 0.04, specularIntensity: 1.2, sheen: 0.6, sheenColor: new THREE.Color('#ff1a2d') }),
+    nerve: mk({ color: '#c9bc9f', roughness: 0.36, clearcoat: 0.92, clearcoatRoughness: 0.07, sheen: 0.55, sheenColor: new THREE.Color('#ffdfd0') }),
+    amygdala: mk({ color: '#752c2c', roughness: 0.4, clearcoat: 0.95, clearcoatRoughness: 0.06, sheenColor: new THREE.Color('#d93838') }),
   }
   return { cortex, sulcus, m }
 }
