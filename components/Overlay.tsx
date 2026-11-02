@@ -4,11 +4,19 @@ import gsap from 'gsap'
 import { P, LENIS } from '../lib/progress'
 import { clamp, sstep } from '../lib/math'
 import { overlay } from '../lib/content'
+import { exitRoom } from '../lib/enter'
 
 const SIZE = { xl: 'text-[clamp(3.6rem,14vw,15rem)] leading-[0.86]', lg: 'text-[clamp(2.6rem,8vw,8rem)] leading-[0.92]', md: 'text-[clamp(1.6rem,3.6vw,3.6rem)] leading-[1.05]', sm: 'text-[clamp(1.1rem,1.7vw,1.7rem)] leading-[1.15]', xs: 'font-mono !not-italic !font-normal !tracking-[0.4em] text-[10px] uppercase leading-[2.2]' }
 const ease = (x: number) => 1 - Math.pow(1 - x, 3)
 
-const go = (f: number) => LENIS.inst?.scrollTo(f * (document.documentElement.scrollHeight - innerHeight))
+const go = (f: number) => {
+  const target = f * (document.documentElement.scrollHeight - innerHeight)
+  if (LENIS.inst) {
+    LENIS.inst.scrollTo(target)
+  } else {
+    window.scrollTo({ top: target, behavior: 'smooth' })
+  }
+}
 const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
 
 export default function Overlay({ ready }: { ready: boolean }) {
@@ -70,14 +78,26 @@ export default function Overlay({ ready }: { ready: boolean }) {
     const amyg = amygRef.current, rm = roomsRef.current
     if (!amyg || !rm) return
     const stopAll = (e: Event) => e.stopPropagation()
-    const onRoomsClick = (e: Event) => { e.stopPropagation(); go(1) }
-    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'pointerup', 'click']
+    const onAmygClick = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      exitRoom()
+      go(0)
+    }
+    const onRoomsClick = (e: Event) => {
+      e.preventDefault()
+      e.stopPropagation()
+      go(1)
+    }
+    const types: (keyof DocumentEventMap)[] = ['pointerdown', 'pointerup']
     types.forEach((t) => amyg.addEventListener(t, stopAll))
     types.forEach((t) => rm.addEventListener(t, stopAll))
+    amyg.addEventListener('click', onAmygClick)
     rm.addEventListener('click', onRoomsClick)
     return () => {
       types.forEach((t) => amyg.removeEventListener(t, stopAll))
       types.forEach((t) => rm.removeEventListener(t, stopAll))
+      amyg.removeEventListener('click', onAmygClick)
       rm.removeEventListener('click', onRoomsClick)
     }
   }, [])
