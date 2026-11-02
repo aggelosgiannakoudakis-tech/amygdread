@@ -4,7 +4,7 @@ import gsap from 'gsap'
 import { P, LENIS } from '../lib/progress'
 import { clamp, sstep } from '../lib/math'
 import { overlay } from '../lib/content'
-import { exitRoom } from '../lib/enter'
+import { E } from '../lib/enter'
 
 const SIZE = { xl: 'text-[clamp(3.6rem,14vw,15rem)] leading-[0.86]', lg: 'text-[clamp(2.6rem,8vw,8rem)] leading-[0.92]', md: 'text-[clamp(1.6rem,3.6vw,3.6rem)] leading-[1.05]', sm: 'text-[clamp(1.1rem,1.7vw,1.7rem)] leading-[1.15]', xs: 'font-mono !not-italic !font-normal !tracking-[0.4em] text-[10px] uppercase leading-[2.2]' }
 const ease = (x: number) => 1 - Math.pow(1 - x, 3)
@@ -81,7 +81,7 @@ export default function Overlay({ ready }: { ready: boolean }) {
     const onAmygClick = (e: Event) => {
       e.preventDefault()
       e.stopPropagation()
-      exitRoom()
+      E.room = -1
       go(0)
     }
     const onRoomsClick = (e: Event) => {
