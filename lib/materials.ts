@@ -1,30 +1,164 @@
 import * as THREE from 'three'
 
-// Hyper-realistic biological tissue shader:
-// 1. Multi-scale grey/pink matter mottling
-// 2. 3D domain-warped branching pia mater veins & micro-capillaries
-// 3. Speckle-free analytical 3D micro-relief normal perturbation
-// 4. Subsurface blood scattering (SSS) at shadow terminators
+let cachedTex: THREE.CanvasTexture | null = null
+
+// Generates a 512x512 seamless vascular + micro-bump texture ONCE on startup (0 runtime FPS cost)
+function getTissueTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null
+  if (cachedTex) return cachedTex
+
+  const size = 512
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+
+  // 1. Neutral base: R = vein mask (0), G = normal X (128), B = normal Y (128)
+  ctx.fillStyle = 'rgb(0, 128, 128)'
+  ctx.fillRect(0, 0, size, size)
+
+  // Deterministic PRNG so the veins look identical every load
+  let seed = 1337
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647
+    return (seed - 1) / 2147483646
+  }
+
+  // Helper to draw seamlessly across all 512x512 tile edges
+  const drawWrapped = (fn: (ox: number, oy: number) => void) => {
+    for (let ox = -size; ox <= size; ox += size) {
+      for (let oy = -size; oy <= size; oy += size) {
+        fn(ox, oy)
+      }
+    }
+  }
+
+  // 2. Recursive branching anatomical vessels & capillaries (encoded in Red channel)
+  const drawVessel = (x: number, y: number, angle: number, len: number, width: number, depth: number) => {
+    if (depth <= 0 || width < 0.35) return
+    const steps = 10
+    const stepLen = len / steps
+    let cx = x
+    let cy = y
+    let ca = angle
+
+    for (let i = 0; i < steps; i++) {
+      const t = i / steps
+      const w = width * (1 - t * 0.32)
+      const nx = cx + Math.cos(ca) * stepLen
+      const ny = cy + Math.sin(ca) * stepLen
+      ca += (rand() - 0.5) * 0.42
+
+      drawWrapped((ox, oy) => {
+        ctx.lineCap = 'round'
+        // Soft subsurface vessel halo
+        ctx.strokeStyle = `rgba(170, 128, 128, ${Math.min(0.28, w * 0.09)})`
+        ctx.lineWidth = w * 3.2
+        ctx.beginPath()
+        ctx.moveTo(cx + ox, cy + oy)
+        ctx.lineTo(nx + ox, ny + oy)
+        ctx.stroke()
+
+        // Sharp capillary core
+        ctx.strokeStyle = `rgba(255, 128, 128, ${Math.min(0.85, 0.35 + w * 0.22)})`
+        ctx.lineWidth = w
+        ctx.beginPath()
+        ctx.moveTo(cx + ox, cy + oy)
+        ctx.lineTo(nx + ox, ny + oy)
+        ctx.stroke()
+      })
+
+      cx = ((nx % size) + size) % size
+      cy = ((ny % size) + size) % size
+
+      // Natural arterial branching
+      if (i === Math.floor(steps * 0.55) && rand() < 0.75) {
+        const dir = rand() < 0.5 ? 1 : -1
+        drawVessel(cx, cy, ca + dir * (0.45 + rand() * 0.35), len * 0.68, w * 0.65, depth - 1)
+      }
+    }
+    // Terminal fork
+    const dir = rand() < 0.5 ? 1 : -1
+    drawVessel(cx, cy, ca + dir * (0.3 + rand() * 0.3), len * 0.72, width * 0.68, depth - 1)
+    if (rand() < 0.65) {
+      drawVessel(cx, cy, ca - dir * (0.35 + rand() * 0.35), len * 0.62, width * 0.58, depth - 1)
+    }
+  }
+
+  // Spawn primary pia mater vessel trees across the tile
+  for (let i = 0; i < 28; i++) {
+    drawVessel(rand() * size, rand() * size, rand() * Math.PI * 2, 75 + rand() * 55, 2.2 + rand() * 1.1, 4)
+  }
+  // Fine capillary bed twigs
+  for (let i = 0; i < 45; i++) {
+    drawVessel(rand() * size, rand() * size, rand() * Math.PI * 2, 35 + rand() * 25, 0.9 + rand() * 0.5, 2)
+  }
+
+  // 3. Compute seamless organic micro-bump normals into Green & Blue channels
+  const img = ctx.getImageData(0, 0, size, size)
+  const d = img.data
+  const hMap = new Float32Array(size * size)
+
+  // Fast seamless multi-frequency organic cellular heightmap
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = y * size + x
+      const vein = d[idx * 4] / 255
+      const u = (x / size) * Math.PI * 2
+      const v = (y / size) * Math.PI * 2
+      const cell =
+        Math.sin(u * 16 + Math.cos(v * 16)) * 0.35 +
+        Math.sin(u * 37 - Math.sin(v * 31)) * 0.25 +
+        Math.cos((u + v) * 64) * 0.15
+      hMap[idx] = cell * 0.35 - vein * 0.65
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const yn = (y + 1) & (size - 1)
+    const yp = (y - 1 + size) & (size - 1)
+    for (let x = 0; x < size; x++) {
+      const xn = (x + 1) & (size - 1)
+      const xp = (x - 1 + size) & (size - 1)
+      const idx = y * size + x
+      const dx = (hMap[y * size + xn] - hMap[y * size + xp]) * 0.5
+      const dy = (hMap[yn * size + x] - hMap[yp * size + x]) * 0.5
+      d[idx * 4 + 1] = Math.max(0, Math.min(255, Math.round(128 + dx * 95)))
+      d[idx * 4 + 2] = Math.max(0, Math.min(255, Math.round(128 + dy * 95)))
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.generateMipmaps = true
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.magFilter = THREE.LinearFilter
+  tex.needsUpdate = true
+  cachedTex = tex
+  return tex
+}
+
 export function organic<T extends THREE.MeshPhysicalMaterial>(m: T, k = 110, amp = 0.12): T {
+  const tex = getTissueTexture()
+
   m.onBeforeCompile = (s) => {
     s.uniforms.uK = { value: k }
+    s.uniforms.uTissueTex = { value: tex }
 
     s.vertexShader = s.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
 varying vec3 vP;
-varying vec3 vRight;
-varying vec3 vUp;
-varying vec3 vFwd;`
+varying vec3 vObjN;`
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
 vP = position;
-vRight = normalize(normalMatrix[0]);
-vUp = normalize(normalMatrix[1]);
-vFwd = normalize(normalMatrix[2]);`
+vObjN = normalize(normal);`
       )
 
     s.fragmentShader = s.fragmentShader
@@ -32,124 +166,58 @@ vFwd = normalize(normalMatrix[2]);`
         '#include <common>',
         `#include <common>
 varying vec3 vP;
-varying vec3 vRight;
-varying vec3 vUp;
-varying vec3 vFwd;
+varying vec3 vObjN;
 uniform float uK;
+uniform sampler2D uTissueTex;
 
-float h3(vec3 p) {
-  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-  p += dot(p, p.yxz + 33.33);
-  return fract((p.x + p.y) * p.z);
-}
-
-float vn(vec3 x) {
-  vec3 i = floor(x), f = fract(x);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x),
-        mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
-    mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x),
-        mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z);
-}
-
-float organicHeight(vec3 p) {
-  float base = 0.55 * vn(p * 0.45) + 0.30 * vn(p * 1.15) + 0.15 * vn(p * 2.5);
-  vec3 wp = p * 0.38 + 0.55 * vec3(vn(p * 0.18), vn(p * 0.18 + 11.7), vn(p * 0.18 + 23.4));
-  float r1 = abs(vn(wp) - 0.5);
-  float vGroove = smoothstep(0.055, 0.0, r1);
-  return base - vGroove * 0.16;
-}`
+float h3(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float vn(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z);}`
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-vec3 pOrg = vP * uK;
+// 1. Low-cost macro tonal variation (1 noise lookup)
+float nz = vn(vP * (uK * 0.45));
+diffuseColor.rgb *= ${(1 - amp / 2).toFixed(3)} + ${amp.toFixed(3)} * nz;
 
-// Automatically distinguish cortex/tissue from yellow nerves and dark arteries
-float isNerve = smoothstep(0.02, 0.08, diffuseColor.g - diffuseColor.b) * smoothstep(0.28, 0.12, diffuseColor.r - diffuseColor.g);
-float isVessel = smoothstep(0.06, 0.18, diffuseColor.r - diffuseColor.g * 2.2);
-float isTissue = clamp(1.0 - isNerve * 0.85 - isVessel * 0.75, 0.0, 1.0);
+// 2. Fast hardware-mipmapped capillary & tissue lookup (zero lag)
+vec3 aw = abs(vObjN);
+aw /= (aw.x + aw.y + aw.z + 0.0001);
+vec2 uvXY = vP.xy * (uK * 0.22);
+vec2 uvZY = vP.zy * (uK * 0.22) + vec2(0.37, 0.61);
+vec3 tSample = texture2D(uTissueTex, uvXY).rgb * (aw.z + aw.y * 0.5) + texture2D(uTissueTex, uvZY).rgb * (aw.x + aw.y * 0.5);
 
-// 1. Multi-scale biological mottling (oxygenated pink-rose vs pale grey matter)
-float nMacro = vn(pOrg * 0.16);
-float nMid   = vn(pOrg * 0.48);
-float nFine  = vn(pOrg * 1.35);
-float nz     = 0.50 * nMacro + 0.32 * nMid + 0.18 * nFine;
+// Apply capillaries only to pink/grey brain tissue, not yellow nerves
+float isTissue = smoothstep(0.02, 0.10, diffuseColor.r - diffuseColor.g) * smoothstep(0.45, 0.20, diffuseColor.r - diffuseColor.g);
+float vein = tSample.r * isTissue;
 
-vec3 warmFlesh = diffuseColor.rgb * vec3(1.07, 0.92, 0.89);
-vec3 coolGrey  = diffuseColor.rgb * vec3(0.95, 0.98, 1.01);
-diffuseColor.rgb = mix(coolGrey, warmFlesh, smoothstep(0.28, 0.72, nMacro));
-diffuseColor.rgb *= ${(1 - amp * 0.55).toFixed(3)} + ${(amp * 1.1).toFixed(3)} * nz;
+// Sub-pial crimson veins
+vec3 veinColor = mix(diffuseColor.rgb * vec3(0.58, 0.22, 0.24), vec3(0.22, 0.02, 0.03), smoothstep(0.25, 0.85, vein));
+diffuseColor.rgb = mix(diffuseColor.rgb, veinColor, vein * 0.65);
 
-// 2. Branching 3D Pia Mater Capillary & Vein Network
-vec3 wp1 = pOrg * 0.38 + 0.55 * vec3(vn(pOrg * 0.18), vn(pOrg * 0.18 + 11.7), vn(pOrg * 0.18 + 23.4));
-float r1 = abs(vn(wp1) - 0.5);
-float r2 = abs(vn(wp1 * 1.85 + 7.3) - 0.5);
-float vMain = smoothstep(0.040, 0.004, r1 + r2 * 0.36);
-
-vec3 wp2 = pOrg * 0.95 + 0.42 * vec3(vn(pOrg * 0.42 + 5.1), vn(pOrg * 0.42 + 19.3), vn(pOrg * 0.42 + 37.9));
-float r3 = abs(vn(wp2) - 0.5);
-float r4 = abs(vn(wp2 * 2.05 + 13.1) - 0.5);
-float vCap = smoothstep(0.034, 0.003, r3 + r4 * 0.42);
-
-float vBed = smoothstep(0.22, 0.75, vn(pOrg * 0.14 + 3.7));
-float veinMask = clamp((vMain * 0.75 + vCap * 0.45 * vBed) * isTissue, 0.0, 1.0);
-
-vec3 veinHalo = diffuseColor.rgb * vec3(0.68, 0.28, 0.28);
-vec3 veinCore = vec3(0.18, 0.018, 0.022);
-diffuseColor.rgb = mix(diffuseColor.rgb, veinHalo, smoothstep(0.0, 0.55, veinMask) * 0.62);
-diffuseColor.rgb = mix(diffuseColor.rgb, veinCore, smoothstep(0.35, 0.95, veinMask) * 0.52);`
+// 3. Natural anatomical crease darkening inside the folds
+float viewCrease = 1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0);
+float foldShadow = smoothstep(0.42, 0.92, viewCrease) * isTissue;
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.52, 0.28, 0.28), foldShadow * 0.48);`
       )
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
-// 3. Speckle-free analytical 3D micro-relief normal perturbation
-float fw = max(length(fwidth(pOrg)), 0.001);
-float detailFade = 1.0 / (1.0 + fw * 3.5);
-float grazeFade = smoothstep(0.08, 0.35, abs(dot(normal, normalize(vViewPosition))));
-float eps = 0.065;
-float h0 = organicHeight(pOrg);
-vec3 grad3D = vec3(
-  organicHeight(pOrg + vec3(eps, 0.0, 0.0)) - h0,
-  organicHeight(pOrg + vec3(0.0, eps, 0.0)) - h0,
-  organicHeight(pOrg + vec3(0.0, 0.0, eps)) - h0
-) / eps;
-vec3 viewGrad = grad3D.x * vRight + grad3D.y * vUp + grad3D.z * vFwd;
-viewGrad -= normal * dot(viewGrad, normal);
-viewGrad = clamp(viewGrad, vec3(-0.32), vec3(0.32));
-normal = normalize(normal - viewGrad * 0.22 * detailFade * grazeFade);`
+vec2 bump = (tSample.gb - 0.5) * 0.16;
+normal = normalize(normal + vec3(bump.x, bump.y, 0.0));`
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-// Matte-satin biological finish: minimum roughness clamped at 0.48 so it never looks like baby oil
-roughnessFactor = clamp(roughnessFactor + (0.5 - nz) * 0.16 - veinMask * 0.12, 0.48, 0.92);`
-      )
-      .replace(
-        '#include <lights_fragment_end>',
-        `#include <lights_fragment_end>
-// 4. Subsurface Scattering (SSS): warm blood-red scatter through shadow terminators
-vec3 totDiff = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
-float diffLum = dot(totDiff, vec3(0.299, 0.587, 0.114));
-float sssZone = smoothstep(0.0, 0.18, diffLum) * (1.0 - smoothstep(0.18, 0.75, diffLum));
-vec3 sssColor = vec3(0.38, 0.05, 0.04) * diffuseColor.rgb;
-reflectedLight.directDiffuse += sssColor * sssZone * (0.55 * isTissue + 0.15);
-
-// 5. Deep fold vascular shadow occlusion
-float ndv = clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0);
-float foldCrease = pow(1.0 - ndv, 2.2);
-vec3 creaseTint = mix(vec3(1.0), vec3(0.58, 0.24, 0.24), foldCrease * 0.42 * isTissue);
-reflectedLight.directDiffuse *= creaseTint;
-reflectedLight.indirectDiffuse *= creaseTint;`
+roughnessFactor = clamp(roughnessFactor + (nz - 0.5) * 0.16 - vein * 0.10, 0.45, 0.92);`
       )
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
-float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.2);
-totalEmissiveRadiance += vec3(0.08, 0.025, 0.022) * fres * 0.28;`
+float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+totalEmissiveRadiance += vec3(0.09, 0.028, 0.024) * fres * 0.32;`
       )
   }
-  m.customProgramCacheKey = () => `organic-v2-${k}-${amp}`
+  m.customProgramCacheKey = () => `organic-fast-${k}-${amp}`
   return m
 }

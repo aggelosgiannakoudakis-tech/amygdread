@@ -21,22 +21,20 @@ export default function Lights() {
     if (rimB.current) rimB.current.intensity = em * 12 * (0.7 + 0.6 * sstep(0.3, 0.6, p))
     if (prac.current) prac.current.intensity = em * (3 + breathe * 0.8 + flick * 0.6) * (1 + 1.2 * bell(0.3, 0.5, 0.8, p) + sstep(0.4, 0.7, p))
     if (inner.current) { inner.current.position.copy(camera.position); inner.current.intensity = 1.6 * inside }
-    scene.environmentIntensity = em * 0.28 * (1 - 0.75 * inside)
+    scene.environmentIntensity = em * 0.3 * (1 - 0.75 * inside)
     gl.toneMappingExposure = 1.1 - 0.3 * inside
   })
   return (
     <>
-      <hemisphereLight args={['#8fa0b8', '#0a0505', 0.22]} />
+      <hemisphereLight args={['#8fa0b8', '#0a0505', 0.2]} />
       <directionalLight ref={key} position={[2.5, 3.5, 5]} color="#f1e4dc" />
       <pointLight ref={rimA} position={[-4, 2.2, -3.5]} color="#d6e0f5" distance={16} decay={2} />
       {!coarse && <pointLight ref={rimB} position={[4, 0.5, -3.5]} color="#cfd6e6" distance={16} decay={2} />}
       <pointLight ref={prac} position={[0, 0.2, -1.4]} color="#7a1018" distance={6} decay={2} />
       {!coarse && <pointLight ref={inner} color="#8a3a30" distance={4} decay={2} intensity={0} />}
-      <Environment resolution={coarse ? 32 : 128}>
-        <Lightformer form="rect" intensity={1.1} position={[0, 5, 3]} scale={[10, 4, 1]} color="#f7ebe6" />
-        <Lightformer form="rect" intensity={0.9} position={[-6, 1, -2]} scale={[2, 8, 1]} color="#cfd8ff" />
-        <Lightformer form="rect" intensity={0.6} position={[6, 1, -2]} scale={[2, 8, 1]} color="#e2e8f5" />
-        <Lightformer form="rect" intensity={0.5} position={[0, -5, 1]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#2b090c" />
+      <Environment resolution={coarse ? 16 : 64}>
+        <Lightformer form="rect" intensity={1.2} position={[0, 4, 3]} scale={[8, 2, 1]} />
+        <Lightformer form="rect" intensity={1} position={[-5, 0, -2]} scale={[1, 6, 1]} color="#cfd8ff" />
       </Environment>
     </>
   )
