@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 let cachedTex: THREE.CanvasTexture | null = null
 
-// Pre-bakes a 1024x1024 seamless anatomical tissue + micro-bump normal + gyrus mottling texture ONCE on startup (0 runtime FPS cost)
+// Pre-bakes a 1024x1024 anatomical tissue + micro-bump normal + gyrus mottling texture ONCE on startup (0 runtime FPS cost)
 function getTissueTexture(): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null
   if (cachedTex) return cachedTex
@@ -203,47 +203,44 @@ vec4 tMicro = tA_micro * aw.z + tB_micro * aw.x + tC_micro * aw.y;
 float nz = mix(tMacro.a, tMicro.a, 0.4);
 
 // Preserved anatomical tissue coloration: warm specimen brown/tan base with creamy pial highlights
-vec3 darkCrevice = diffuseColor.rgb * vec3(0.42, 0.32, 0.28);
-vec3 warmPialTan = diffuseColor.rgb * vec3(1.15, 0.98, 0.88);
-vec3 wetGreyTan = diffuseColor.rgb * vec3(0.88, 0.82, 0.78);
+vec3 baseCol = diffuseColor.rgb;
+vec3 darkGrain = baseCol * vec3(0.55, 0.45, 0.40);
+vec3 warmTan = baseCol * vec3(1.25, 1.10, 0.95);
+vec3 creamCrown = baseCol * vec3(1.45, 1.30, 1.15);
 
-vec3 tissueTone = mix(darkCrevice, warmPialTan, smoothstep(0.2, 0.8, nz));
-diffuseColor.rgb = mix(diffuseColor.rgb, tissueTone, uVeins * 0.85);
+float mettleNoise = smoothstep(0.15, 0.85, nz);
+vec3 tissueTone = mix(darkGrain, warmTan, mettleNoise);
+tissueTone = mix(tissueTone, creamCrown, pow(nz, 2.2) * 0.45);
+
+diffuseColor.rgb = mix(baseCol, tissueTone, uVeins * 0.90);
 
 // Branching crimson pia-mater blood vessels & fine capillaries
-float vBig = smoothstep(0.18, 0.72, tMacro.r);
-float vCap = smoothstep(0.22, 0.78, tMicro.r) * (0.4 + 0.6 * tMacro.a);
-float veinMask = clamp((vBig * 0.82 + vCap * 0.45) * uVeins, 0.0, 1.0);
+float vBig = smoothstep(0.22, 0.75, tMacro.r);
+float vCap = smoothstep(0.25, 0.80, tMicro.r) * (0.35 + 0.65 * tMacro.a);
+float veinMask = clamp((vBig * 0.75 + vCap * 0.40) * uVeins, 0.0, 1.0);
 
-vec3 subPialRed = diffuseColor.rgb * vec3(0.58, 0.18, 0.18);
-vec3 deepVenous = vec3(0.22, 0.015, 0.02);
+vec3 subPialRed = diffuseColor.rgb * vec3(0.65, 0.22, 0.20);
+vec3 deepVenous = vec3(0.25, 0.04, 0.04);
 vec3 vesselCol = mix(subPialRed, deepVenous, smoothstep(0.3, 0.85, veinMask));
-diffuseColor.rgb = mix(diffuseColor.rgb, vesselCol, veinMask * 0.78);`
+diffuseColor.rgb = mix(diffuseColor.rgb, vesselCol, veinMask * 0.65);`
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-// Wet glossy clearcoat film over tissue gyri: crevices stay moist/dark, ridge crowns get crisp specular highlights
-roughnessFactor = clamp(roughnessFactor * (0.75 + 0.5 * nz) - veinMask * 0.18, 0.22, 0.75);`
+// Natural preserved organic tissue roughness (satin finish, soft highlights over gyri)
+roughnessFactor = clamp(roughnessFactor + (0.5 - nz) * 0.15 - veinMask * 0.10, 0.55, 0.82);`
       )
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
 // Micro-bump normal map giving realistic anatomical depth to gyrus surface folds
-vec2 bump = ((tMacro.gb - 0.5) * 0.7 + (tMicro.gb - 0.5) * 0.4) * (0.2 + 0.35 * uVeins);
+vec2 bump = ((tMacro.gb - 0.5) * 0.6 + (tMicro.gb - 0.5) * 0.35) * (0.25 + 0.3 * uVeins);
 normal = normalize(normal + vec3(bump.x, bump.y, 0.0));
 
-// Deep anatomical sulcus crease ambient occlusion (dark crimson/brown pooled shadows in crevices)
+// Subtle crevice ambient occlusion
 float ndv = clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0);
-float foldCrease = pow(1.0 - ndv, 1.8);
-vec3 sulcusShadow = vec3(0.25, 0.12, 0.10);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * sulcusShadow, foldCrease * 0.65 * uVeins);`
-      )
-      .replace(
-        '#include <clearcoat_normal_fragment_maps>',
-        `#include <clearcoat_normal_fragment_maps>
-// Wet organic liquid film coat over tissue contours
-clearcoatNormal = normalize(clearcoatNormal + vec3(bump.x, bump.y, 0.0) * 0.6);`
+float foldCrease = pow(1.0 - ndv, 2.0);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.45, foldCrease * 0.45 * uVeins);`
       )
       .replace(
         '#include <lights_fragment_end>',

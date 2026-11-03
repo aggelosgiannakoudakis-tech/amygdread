@@ -9,22 +9,34 @@ import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
 const TARGET = 2.6 // world-space size of the brain
-const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, roughness: 0.44, clearcoat: 0.68, clearcoatRoughness: 0.25, specularIntensity: 0.75, sheen: 0.35, transparent: false, depthWrite: true, opacity: 1, ...o }), 1.2, 0.22, 1.0)
+const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({
+  side: THREE.DoubleSide,
+  roughness: 0.66,
+  clearcoat: 0.25,
+  clearcoatRoughness: 0.55,
+  specularIntensity: 0.4,
+  sheen: 0.25,
+  sheenColor: new THREE.Color('#9e7b6c'),
+  sheenRoughness: 0.6,
+  transparent: false,
+  depthWrite: true,
+  opacity: 1,
+  ...o
+}), 1.2, 0.22, 1.0)
 
 function makeMaterials() {
   const cortex = [0, 1, 2, 3].map((i) => mk({
-    color: new THREE.Color('#6d5246').offsetHSL(0.01 * (i - 1.5), 0.04 * (i - 1.5), (i - 1.5) * 0.015),
-    sheenColor: new THREE.Color('#7d5e50'),
-    sheenRoughness: 0.6
+    color: new THREE.Color('#917365').offsetHSL(0.01 * (i - 1.5), 0.03 * (i - 1.5), (i - 1.5) * 0.02),
+    sheenColor: new THREE.Color('#a38475'),
   }))
-  const sulcus = mk({ color: '#4e3a32', roughness: 0.38, clearcoat: 0.75, clearcoatRoughness: 0.2, sheenColor: new THREE.Color('#63493e'), sheenRoughness: 0.7 })
+  const sulcus = mk({ color: '#73574c', roughness: 0.62, clearcoat: 0.2, clearcoatRoughness: 0.6 })
   const m: Record<Exclude<Layer, 'hidden' | 'cortex'>, THREE.Material> = {
-    cerebellum: mk({ color: '#634c41', roughness: 0.52, clearcoat: 0.55, clearcoatRoughness: 0.3 }),
-    deep: mk({ color: '#574239', roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.25 }),
-    tract: mk({ color: '#9c8f82', roughness: 0.55, clearcoat: 0.3 }),
-    vessel: mk({ color: '#6e1822', roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15 }),
-    nerve: mk({ color: '#a3977c', roughness: 0.58 }),
-    amygdala: mk({ color: '#6e443c', roughness: 0.48, clearcoat: 0.6 }),
+    cerebellum: mk({ color: '#87695c', roughness: 0.70 }),
+    deep: mk({ color: '#7d6053', roughness: 0.64 }),
+    tract: mk({ color: '#b0a091', roughness: 0.68 }),
+    vessel: mk({ color: '#7a222a', roughness: 0.48, clearcoat: 0.4, clearcoatRoughness: 0.3 }),
+    nerve: mk({ color: '#b5a78c', roughness: 0.65 }),
+    amygdala: mk({ color: '#8c5c52', roughness: 0.62 }),
   }
   return { cortex, sulcus, m }
 }
@@ -128,8 +140,6 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       if (isTrans !== lastTrans.current || Math.abs(fade - lastFade.current) > 0.002) {
         lastTrans.current = isTrans
         lastFade.current = fade
-        // While fade === 1 (95% of scroll including shatter), transparent = false restores GPU Early-Z culling.
-        // When fade < 0.999 (room transition), transparent = true enables smooth opacity fade.
         allMats.forEach((m) => {
           m.transparent = isTrans
           m.opacity = fade
