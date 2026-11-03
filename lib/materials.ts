@@ -2,7 +2,7 @@ import * as THREE from 'three'
 
 let cachedTex: THREE.CanvasTexture | null = null
 
-// Pre-bakes a 1024x1024 seamless vascular + micro-bump normal + mottling texture ONCE on startup (0 runtime FPS cost)
+// Pre-bakes a 1024x1024 seamless anatomical tissue + micro-bump normal + gyrus mottling texture ONCE on startup (0 runtime FPS cost)
 function getTissueTexture(): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null
   if (cachedTex) return cachedTex
@@ -13,7 +13,7 @@ function getTissueTexture(): THREE.CanvasTexture | null {
   canvas.height = size
   const ctx = canvas.getContext('2d')!
 
-  // Base fill: R = 0 (veins), G = 128 (normal X), B = 128 (normal Y), A = 255
+  // Base fill: R = veins/mottle, G = 128 (normal X), B = 128 (normal Y), A = tissue density
   ctx.fillStyle = 'rgb(0, 128, 128)'
   ctx.fillRect(0, 0, size, size)
 
@@ -32,7 +32,7 @@ function getTissueTexture(): THREE.CanvasTexture | null {
     }
   }
 
-  // Recursive meandering anatomical blood vessels (encoded into Red channel)
+  // Meandering anatomical pia-mater blood vessels
   const drawVessel = (x: number, y: number, angle: number, len: number, width: number, depth: number) => {
     if (depth <= 0 || width < 0.35) return
     const steps = 14
@@ -52,16 +52,14 @@ function getTissueTexture(): THREE.CanvasTexture | null {
 
       drawWrapped((ox, oy) => {
         ctx.lineCap = 'round'
-        // Soft perivascular subsurface halo
-        ctx.strokeStyle = `rgba(190, 128, 128, ${Math.min(0.32, w * 0.065)})`
-        ctx.lineWidth = w * 3.6
+        ctx.strokeStyle = `rgba(180, 100, 90, ${Math.min(0.35, w * 0.07)})`
+        ctx.lineWidth = w * 3.2
         ctx.beginPath()
         ctx.moveTo(cx + ox, cy + oy)
         ctx.lineTo(nx + ox, ny + oy)
         ctx.stroke()
 
-        // Crisp vessel lumen
-        ctx.strokeStyle = `rgba(255, 128, 128, ${Math.min(0.95, 0.42 + w * 0.18)})`
+        ctx.strokeStyle = `rgba(255, 120, 110, ${Math.min(0.95, 0.45 + w * 0.2)})`
         ctx.lineWidth = w
         ctx.beginPath()
         ctx.moveTo(cx + ox, cy + oy)
@@ -72,14 +70,12 @@ function getTissueTexture(): THREE.CanvasTexture | null {
       cx = ((nx % size) + size) % size
       cy = ((ny % size) + size) % size
 
-      // Side arterioles / venules
       if ((i === 5 || i === 10) && rand() < 0.78) {
         const dir = rand() < 0.5 ? 1 : -1
         drawVessel(cx, cy, ca + dir * (0.42 + rand() * 0.45), len * 0.66, w * 0.64, depth - 1)
       }
     }
 
-    // Terminal bifurcation
     const dir = rand() < 0.5 ? 1 : -1
     drawVessel(cx, cy, ca + dir * (0.28 + rand() * 0.32), len * 0.74, width * 0.68, depth - 1)
     if (rand() < 0.75) {
@@ -87,16 +83,13 @@ function getTissueTexture(): THREE.CanvasTexture | null {
     }
   }
 
-  // 1. Primary pia mater vascular trees
   for (let i = 0; i < 38; i++) {
     drawVessel(rand() * size, rand() * size, rand() * Math.PI * 2, 130 + rand() * 90, 3.6 + rand() * 1.8, 5)
   }
-  // 2. Dense fine capillary bed
   for (let i = 0; i < 95; i++) {
     drawVessel(rand() * size, rand() * size, rand() * Math.PI * 2, 55 + rand() * 45, 1.3 + rand() * 0.8, 3)
   }
 
-  // 3. Bake 3D micro-relief normal map (G, B) and organic tissue mottling (A)
   const img = ctx.getImageData(0, 0, size, size)
   const d = img.data
   const hMap = new Float32Array(size * size)
@@ -109,19 +102,19 @@ function getTissueTexture(): THREE.CanvasTexture | null {
       const idx = y * size + x
       const vein = d[idx * 4] / 255
 
-      // Seamless multi-scale organic cellular grain
+      // Multi-scale anatomical cellular grain and gyrus tissue mottling
       const mottle =
-        Math.sin(u * 3 + Math.cos(v * 3)) * 0.35 +
-        Math.cos(u * 7 - Math.sin(v * 6)) * 0.25 +
-        Math.sin((u + v) * 11) * 0.15
+        Math.sin(u * 2 + Math.cos(v * 2.5)) * 0.35 +
+        Math.cos(u * 5 - Math.sin(v * 4.5)) * 0.28 +
+        Math.sin((u + v) * 8) * 0.18 +
+        Math.cos((u - v) * 14) * 0.12
       const pores =
-        Math.sin(u * 29 + Math.cos(v * 31)) * 0.35 +
-        Math.cos(u * 61 - Math.sin(v * 53)) * 0.25 +
-        Math.sin((u - v) * 97) * 0.20
+        Math.sin(u * 23 + Math.cos(v * 27)) * 0.35 +
+        Math.cos(u * 47 - Math.sin(v * 41)) * 0.25 +
+        Math.sin((u - v) * 79) * 0.20
 
-      // Vessels slightly emboss above the cortex; pores create subtle organic dimples
-      hMap[idx] = pores * 0.28 + mottle * 0.22 + Math.pow(vein, 1.3) * 0.95
-      d[idx * 4 + 3] = Math.max(0, Math.min(255, Math.round(128 + mottle * 110)))
+      hMap[idx] = pores * 0.22 + mottle * 0.35 + Math.pow(vein, 1.2) * 0.8
+      d[idx * 4 + 3] = Math.max(0, Math.min(255, Math.round(128 + mottle * 115)))
     }
   }
 
@@ -135,8 +128,8 @@ function getTissueTexture(): THREE.CanvasTexture | null {
       const idx = y * size + x
       const dx = (hMap[y * size + xn] - hMap[y * size + xp]) * 0.5
       const dy = (hMap[yn * size + x] - hMap[yp * size + x]) * 0.5
-      d[idx * 4 + 1] = Math.max(0, Math.min(255, Math.round(128 + dx * 135)))
-      d[idx * 4 + 2] = Math.max(0, Math.min(255, Math.round(128 + dy * 135)))
+      d[idx * 4 + 1] = Math.max(0, Math.min(255, Math.round(128 + dx * 160)))
+      d[idx * 4 + 2] = Math.max(0, Math.min(255, Math.round(128 + dy * 160)))
     }
   }
   ctx.putImageData(img, 0, 0)
@@ -153,7 +146,7 @@ function getTissueTexture(): THREE.CanvasTexture | null {
   return tex
 }
 
-export function organic<T extends THREE.MeshPhysicalMaterial>(m: T, k = 110, amp = 0.12, veins = 1.0): T {
+export function organic<T extends THREE.MeshPhysicalMaterial>(m: T, k = 1.2, amp = 0.22, veins = 1.0): T {
   const tex = getTissueTexture()
 
   m.onBeforeCompile = (s) => {
@@ -188,65 +181,74 @@ uniform sampler2D uTissueTex;`
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-// Seamless bi-planar projection scaled to the brain's physical dimensions
+// Seamless tri-planar projection scaled to the brain's physical dimensions
 vec3 aw = abs(vObjN);
+aw = pow(aw, vec3(2.0));
 aw /= (aw.x + aw.y + aw.z + 0.0001);
-vec2 uvA = vP.xy * (uK * 0.22) + vP.z * (uK * 0.07);
-vec2 uvB = vP.zy * (uK * 0.22) + vP.x * (uK * 0.07) + vec2(0.41, 0.67);
-float wA = aw.z + aw.y * 0.5;
-float wB = aw.x + aw.y * 0.5;
 
-// Two-octave hardware texture lookup (macro vessels + fine capillary bed, 0 procedural noise cost)
-vec4 tMacro = texture2D(uTissueTex, uvA * 0.52) * wA + texture2D(uTissueTex, uvB * 0.52) * wB;
-vec4 tMicro = texture2D(uTissueTex, uvA * 1.45 + 0.23) * wA + texture2D(uTissueTex, uvB * 1.45 + 0.23) * wB;
+vec2 uvA = vP.xy * (uK * 0.35) + vP.z * (uK * 0.12);
+vec2 uvB = vP.zy * (uK * 0.35) + vP.x * (uK * 0.12) + vec2(0.41, 0.67);
+vec2 uvC = vP.xz * (uK * 0.35) + vP.y * (uK * 0.12) + vec2(0.19, 0.83);
 
-float nz = mix(tMacro.a, tMicro.a, 0.35);
+vec4 tA = texture2D(uTissueTex, uvA);
+vec4 tB = texture2D(uTissueTex, uvB);
+vec4 tC = texture2D(uTissueTex, uvC);
+vec4 tMacro = tA * aw.z + tB * aw.x + tC * aw.y;
 
-// 1. Living/preserved grey-matter & oxygenated pink-matter tonal variation
-vec3 coolGrey = diffuseColor.rgb * vec3(0.94, 0.96, 1.02);
-vec3 warmPink = diffuseColor.rgb * vec3(1.10, 0.86, 0.82);
-diffuseColor.rgb = mix(diffuseColor.rgb, mix(coolGrey, warmPink, tMacro.a), uVeins * 0.75);
-diffuseColor.rgb *= ${(1 - amp * 0.6).toFixed(3)} + ${(amp * 1.2).toFixed(3)} * nz;
+vec4 tA_micro = texture2D(uTissueTex, uvA * 2.8 + 0.31);
+vec4 tB_micro = texture2D(uTissueTex, uvB * 2.8 + 0.31);
+vec4 tC_micro = texture2D(uTissueTex, uvC * 2.8 + 0.31);
+vec4 tMicro = tA_micro * aw.z + tB_micro * aw.x + tC_micro * aw.y;
 
-// 2. Branching crimson pia-mater blood vessels & fine capillaries
-float vBig = smoothstep(0.12, 0.78, tMacro.r);
-float vCap = smoothstep(0.16, 0.82, tMicro.r) * (0.45 + 0.55 * tMacro.a);
-float veinMask = clamp((vBig * 0.85 + vCap * 0.50) * uVeins, 0.0, 1.0);
+float nz = mix(tMacro.a, tMicro.a, 0.4);
 
-vec3 subPialRed = diffuseColor.rgb * vec3(0.52, 0.14, 0.16);
-vec3 deepVenous = vec3(0.16, 0.008, 0.015);
-vec3 vesselCol = mix(subPialRed, deepVenous, smoothstep(0.25, 0.85, veinMask));
-diffuseColor.rgb = mix(diffuseColor.rgb, vesselCol, veinMask * 0.82);`
+// Preserved anatomical tissue coloration: warm specimen brown/tan base with creamy pial highlights
+vec3 darkCrevice = diffuseColor.rgb * vec3(0.42, 0.32, 0.28);
+vec3 warmPialTan = diffuseColor.rgb * vec3(1.15, 0.98, 0.88);
+vec3 wetGreyTan = diffuseColor.rgb * vec3(0.88, 0.82, 0.78);
+
+vec3 tissueTone = mix(darkCrevice, warmPialTan, smoothstep(0.2, 0.8, nz));
+diffuseColor.rgb = mix(diffuseColor.rgb, tissueTone, uVeins * 0.85);
+
+// Branching crimson pia-mater blood vessels & fine capillaries
+float vBig = smoothstep(0.18, 0.72, tMacro.r);
+float vCap = smoothstep(0.22, 0.78, tMicro.r) * (0.4 + 0.6 * tMacro.a);
+float veinMask = clamp((vBig * 0.82 + vCap * 0.45) * uVeins, 0.0, 1.0);
+
+vec3 subPialRed = diffuseColor.rgb * vec3(0.58, 0.18, 0.18);
+vec3 deepVenous = vec3(0.22, 0.015, 0.02);
+vec3 vesselCol = mix(subPialRed, deepVenous, smoothstep(0.3, 0.85, veinMask));
+diffuseColor.rgb = mix(diffuseColor.rgb, vesselCol, veinMask * 0.78);`
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-// Vessels and moist sulci are glossier; tissue crowns have natural organic micro-roughness
-roughnessFactor = clamp(roughnessFactor + (0.5 - nz) * 0.18 - veinMask * 0.22, 0.32, 0.88);`
+// Wet glossy clearcoat film over tissue gyri: crevices stay moist/dark, ridge crowns get crisp specular highlights
+roughnessFactor = clamp(roughnessFactor * (0.75 + 0.5 * nz) - veinMask * 0.18, 0.22, 0.75);`
       )
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
-// 3. 3D raised vessel & cellular micro-bump normal map
-vec2 bump = ((tMacro.gb - 0.5) * 0.65 + (tMicro.gb - 0.5) * 0.45) * (0.15 + 0.28 * uVeins);
+// Micro-bump normal map giving realistic anatomical depth to gyrus surface folds
+vec2 bump = ((tMacro.gb - 0.5) * 0.7 + (tMicro.gb - 0.5) * 0.4) * (0.2 + 0.35 * uVeins);
 normal = normalize(normal + vec3(bump.x, bump.y, 0.0));
 
-// 4. Deep anatomical sulcus/crease darkening (dark crimson pooled blood inside the folds)
+// Deep anatomical sulcus crease ambient occlusion (dark crimson/brown pooled shadows in crevices)
 float ndv = clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0);
-float foldCrease = pow(1.0 - ndv, 2.15);
-vec3 sulcusShadow = vec3(0.18, 0.025, 0.035);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * sulcusShadow, foldCrease * 0.72 * uVeins);`
+float foldCrease = pow(1.0 - ndv, 1.8);
+vec3 sulcusShadow = vec3(0.25, 0.12, 0.10);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * sulcusShadow, foldCrease * 0.65 * uVeins);`
       )
       .replace(
         '#include <clearcoat_normal_fragment_maps>',
         `#include <clearcoat_normal_fragment_maps>
-// Break up the wet clearcoat layer with micro-texture so it looks like moist tissue, NOT baby oil
-clearcoatNormal = normalize(clearcoatNormal + vec3(bump.x, bump.y, 0.0) * 0.85);`
+// Wet organic liquid film coat over tissue contours
+clearcoatNormal = normalize(clearcoatNormal + vec3(bump.x, bump.y, 0.0) * 0.6);`
       )
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-// 5. Subsurface Blood Scattering (SSS): warm crimson translucency along light/shadow edges
+// Subsurface Blood Scattering (SSS): warm crimson translucency along light/shadow edges
 vec3 totLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
 float lum = dot(totLight, vec3(0.299, 0.587, 0.114));
 float sssBand = smoothstep(0.01, 0.22, lum) * (1.0 - smoothstep(0.22, 0.85, lum));
