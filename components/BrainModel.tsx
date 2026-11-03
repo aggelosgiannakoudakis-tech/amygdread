@@ -8,35 +8,53 @@ import { sstep, bell } from '../lib/math'
 import { PieceBuilder, Piece, Layer } from '../lib/pieces'
 import { organic } from '../lib/materials'
 
-const TARGET = 2.6 // world-space size of the brain
-const mk = (o: THREE.MeshPhysicalMaterialParameters) => organic(new THREE.MeshPhysicalMaterial({
-  side: THREE.DoubleSide,
-  roughness: 0.66,
-  clearcoat: 0.25,
-  clearcoatRoughness: 0.55,
-  specularIntensity: 0.4,
-  sheen: 0.25,
-  sheenColor: new THREE.Color('#9e7b6c'),
-  sheenRoughness: 0.6,
-  transparent: false,
-  depthWrite: true,
-  opacity: 1,
-  ...o
-}), 1.2, 0.22, 1.0)
+const TARGET = 2.6
+
+// Soft wet film, NOT plastic. High roughness base + low clearcoat = real tissue, not clay/wax.
+const mk = (o: THREE.MeshPhysicalMaterialParameters) =>
+  organic(
+    new THREE.MeshPhysicalMaterial({
+      side: THREE.DoubleSide,
+      roughness: 0.62,
+      metalness: 0,
+      clearcoat: 0.18,
+      clearcoatRoughness: 0.62,
+      specularIntensity: 0.35,
+      sheen: 0.4,
+      sheenColor: new THREE.Color('#c4a090'),
+      sheenRoughness: 0.55,
+      envMapIntensity: 0.55,
+      transparent: false,
+      depthWrite: true,
+      opacity: 1,
+      ...o,
+    }),
+    2.6,  // uK — denser grain on cortex
+    0.55, // amp — strong mottling (kills clay)
+    1.0
+  )
 
 function makeMaterials() {
-  const cortex = [0, 1, 2, 3].map((i) => mk({
-    color: new THREE.Color('#917365').offsetHSL(0.01 * (i - 1.5), 0.03 * (i - 1.5), (i - 1.5) * 0.02),
-    sheenColor: new THREE.Color('#a38475'),
-  }))
-  const sulcus = mk({ color: '#73574c', roughness: 0.62, clearcoat: 0.2, clearcoatRoughness: 0.6 })
+  // Warm cadaveric / preserved specimen palette matching reference
+  const cortex = [0, 1, 2, 3].map((i) =>
+    mk({
+      color: new THREE.Color('#9a7a68').offsetHSL(0.008 * (i - 1.5), 0.04 * (i - 1.5), 0.025 * (i - 1.5)),
+      sheenColor: new THREE.Color('#b89582'),
+    })
+  )
+  const sulcus = mk({
+    color: '#6b4e42',
+    roughness: 0.70,
+    clearcoat: 0.12,
+    clearcoatRoughness: 0.7,
+  })
   const m: Record<Exclude<Layer, 'hidden' | 'cortex'>, THREE.Material> = {
-    cerebellum: mk({ color: '#87695c', roughness: 0.70 }),
-    deep: mk({ color: '#7d6053', roughness: 0.64 }),
-    tract: mk({ color: '#b0a091', roughness: 0.68 }),
-    vessel: mk({ color: '#7a222a', roughness: 0.48, clearcoat: 0.4, clearcoatRoughness: 0.3 }),
-    nerve: mk({ color: '#b5a78c', roughness: 0.65 }),
-    amygdala: mk({ color: '#8c5c52', roughness: 0.62 }),
+    cerebellum: mk({ color: '#8a6d5c', roughness: 0.68 }),
+    deep: mk({ color: '#7a5e4e', roughness: 0.64 }),
+    tract: mk({ color: '#b5a48f', roughness: 0.72, clearcoat: 0.08 }),
+    vessel: mk({ color: '#6e1c24', roughness: 0.45, clearcoat: 0.35, clearcoatRoughness: 0.4 }),
+    nerve: mk({ color: '#b8a888', roughness: 0.7, clearcoat: 0.1 }),
+    amygdala: mk({ color: '#8a5a50', roughness: 0.65 }),
   }
   return { cortex, sulcus, m }
 }
@@ -54,7 +72,10 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
   const warmed = useRef(false)
   const warming = useRef(false)
 
-  useEffect(() => { builder.current = new PieceBuilder(gltfScene); setRig(null) }, [gltfScene])
+  useEffect(() => {
+    builder.current = new PieceBuilder(gltfScene)
+    setRig(null)
+  }, [gltfScene])
 
   useFrame(() => {
     const b = builder.current
@@ -63,7 +84,14 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       const { pieces, center, size } = b.result()
       const coarse = typeof window !== 'undefined' && matchMedia('(pointer:coarse)').matches
       if (coarse) pieces.forEach((p) => { if (p.layer === 'nerve') p.mesh.visible = false })
-      pieces.forEach((p) => { p.mesh.material = p.layer === 'cortex' ? (/sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string) ? mats.sulcus : mats.cortex[Math.floor(p.h * 4) % 4]) : mats.m[p.layer as keyof typeof mats.m] })
+      pieces.forEach((p) => {
+        p.mesh.material =
+          p.layer === 'cortex'
+            ? /sulc/i.test((p.mesh.userData.name ?? p.mesh.name) as string)
+              ? mats.sulcus
+              : mats.cortex[Math.floor(p.h * 4) % 4]
+            : mats.m[p.layer as keyof typeof mats.m]
+      })
       setRig({ pieces, center, size })
     }
   })
@@ -85,18 +113,23 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     const allBrainMats = [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as any[]
 
     try {
-      // 1. Warm up opaque pipeline variant
-      allBrainMats.forEach((m) => { m.transparent = false; m.opacity = 1; m.depthWrite = true; m.needsUpdate = true })
+      allBrainMats.forEach((m) => {
+        m.transparent = false
+        m.opacity = 1
+        m.depthWrite = true
+        m.needsUpdate = true
+      })
       await gl.compileAsync(canvasScene, warmCam)
 
-      // 2. Warm up transparent pipeline variant
-      allBrainMats.forEach((m) => { m.transparent = true; m.needsUpdate = true })
+      allBrainMats.forEach((m) => {
+        m.transparent = true
+        m.needsUpdate = true
+      })
       await gl.compileAsync(canvasScene, warmCam)
     } catch {
       // ignore
     }
 
-    // Restore clean default opaque state for start
     allBrainMats.forEach((m) => {
       m.transparent = false
       m.opacity = 1
@@ -115,24 +148,44 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
     if (!rig) return
     S.pieces = rig.pieces
     S.norm = { c: rig.center, s: TARGET / rig.size }
-    if (warmed.current) { onReady(); return }
+    if (warmed.current) {
+      onReady()
+      return
+    }
     warmed.current = true
     compileBoth()
     onReady()
   }, [rig, onReady, gl, canvasScene, mats])
 
-  useEffect(() => () => { mats.cortex.forEach((m) => m.dispose()); mats.sulcus.dispose(); Object.values(mats.m).forEach((m) => m.dispose()) }, [mats])
+  useEffect(
+    () => () => {
+      mats.cortex.forEach((m) => m.dispose())
+      mats.sulcus.dispose()
+      Object.values(mats.m).forEach((m) => m.dispose())
+    },
+    [mats]
+  )
 
-  const allMats = useMemo(() => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[], [mats])
+  const allMats = useMemo(
+    () => [...mats.cortex, mats.sulcus, ...Object.values(mats.m)] as THREE.Material[],
+    [mats]
+  )
   const lastFade = useRef(1)
   const lastTrans = useRef(false)
   const q = useMemo(() => new THREE.Quaternion(), [])
   const e = useMemo(() => new THREE.Euler(), [])
-  const tmp = useMemo(() => new THREE.Vector3(), []), fd = useMemo(() => new THREE.Vector3(), []), wp = useMemo(() => new THREE.Vector3(), [])
+  const tmp = useMemo(() => new THREE.Vector3(), [])
+  const fd = useMemo(() => new THREE.Vector3(), [])
+  const wp = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((state) => {
-    const g = group.current; if (!g || !rig) return
-    g.visible = P.r < 0.12; if (!g.visible) { S.remaining = 0; return }
+    const g = group.current
+    if (!g || !rig) return
+    g.visible = P.r < 0.12
+    if (!g.visible) {
+      S.remaining = 0
+      return
+    }
 
     if (!warming.current) {
       const fade = 1 - sstep(0, 0.1, P.r)
@@ -148,9 +201,13 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
       }
     }
 
-    const p = P.value, t = state.clock.elapsedTime, red = P.reduced
-    smooth.current.x += (P.mx - smooth.current.x) * 0.04; smooth.current.y += (P.my - smooth.current.y) * 0.04
-    const settle = sstep(0.3, 0.6, p), live = 1 - settle
+    const p = P.value
+    const t = state.clock.elapsedTime
+    const red = P.reduced
+    smooth.current.x += (P.mx - smooth.current.x) * 0.04
+    smooth.current.y += (P.my - smooth.current.y) * 0.04
+    const settle = sstep(0.3, 0.6, p)
+    const live = 1 - settle
     g.rotation.y = (0.4 - 0.25 * p + (red ? 0 : Math.sin(t * 0.05) * 0.05 + smooth.current.x * 0.03)) * live
     g.rotation.x = (red ? 0 : smooth.current.y * 0.03) * live
     g.position.y = 0.22 * live
@@ -170,14 +227,22 @@ export default function BrainModel({ onReady }: { onReady: () => void }) {
         if (!red) {
           const pre = sstep(pc.start - 0.1, pc.start, p) * (1 - sstep(pc.start, pc.start + 0.02, p))
           const a = pc.tremble * (tremAmp * 0.5 + pre * 1.5)
-          if (a > 0) tmp.set(tmp.x + Math.sin(t * 38 + pc.h * 40) * a, tmp.y + Math.sin(t * 41 + pc.h * 70) * a, tmp.z + Math.sin(t * 35 + pc.h * 90) * a)
+          if (a > 0)
+            tmp.set(
+              tmp.x + Math.sin(t * 38 + pc.h * 40) * a,
+              tmp.y + Math.sin(t * 41 + pc.h * 70) * a,
+              tmp.z + Math.sin(t * 35 + pc.h * 90) * a
+            )
         }
         pc.mesh.position.copy(tmp)
         const sp = ease + drift * 0.5
-        e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp); q.setFromEuler(e); pc.mesh.quaternion.copy(q)
+        e.set(pc.spin.x * sp, pc.spin.y * sp, pc.spin.z * sp)
+        q.setFromEuler(e)
+        pc.mesh.quaternion.copy(q)
       }
       if (doRemain) {
-        wp.setFromMatrixPosition(pc.mesh.matrixWorld); wp.sub(state.camera.position)
+        wp.setFromMatrixPosition(pc.mesh.matrixWorld)
+        wp.sub(state.camera.position)
         const d = wp.length()
         if (d < 12 && d > 0.05 && wp.dot(fd) / d > 0.35) n++
       }
