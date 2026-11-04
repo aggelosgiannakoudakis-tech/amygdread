@@ -15,81 +15,101 @@ interface BrainModelProps {
 }
 
 export default function BrainModel({ onReady }: BrainModelProps) {
-  const { scene } = useGLTF("/models/brain-transformed.glb") as any;
+  // Path verification: Ensure this file is in public/models/brain-transformed.glb
+  const { nodes, scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
+
+  const meshRef = useRef<THREE.InstancedMesh>(null!);
   const warming = useRef(true);
 
   const { pieces } = useMemo(() => buildPieces(scene), [scene]);
-
   const material = useMemo(() => materials.organic(), []);
 
   useEffect(() => {
-    if (!pieces) return;
-    pieces.forEach((p: Piece) => {
-      if (p.mesh) {
-        p.mesh.material = material;
-      }
-    });
-  }, [pieces, material]);
-
-  useEffect(() => {
     let active = true;
-
-    const compileBoth = async () => {
+    const compile = async () => {
       try {
         material.transparent = false;
-        material.depthWrite = true;
-        await gl.compileAsync(scene, camera);
-
+        await gl.compileAsync(meshRef.current, camera);
         material.transparent = true;
-        await gl.compileAsync(scene, camera);
-      } catch (e) {
-        // Compile warning ignored
-      }
-
+        await gl.compileAsync(meshRef.current, camera);
+      } catch (e) {}
       if (active) {
         warming.current = false;
         onReady?.();
       }
     };
+    compile();
+    return () => { active = false; };
+  }, [gl, camera, material, onReady]);
 
-    compileBoth();
+  const { instanceMatrix, colors } = useMemo(() => {
+    const matrix = new Float32Array(pieces.length * 16);
+    const colorArr = new Float32Array(pieces.length * 3);
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color("#ffffff");
 
-    return () => {
-      active = false;
-    };
-  }, [gl, camera, scene, material, onReady]);
+    pieces.forEach((p: Piece, i: number) => {
+      dummy.position.copy(p.home);
+      dummy.updateMatrix();
+      dummy.matrix.toArray(matrix, i * 16);
+      color.toArray(colorArr, i * 3);
+    });
+    return { instanceMatrix: matrix, colors: colorArr };
+  }, [pieces]);
 
   useFrame((state) => {
-    if (warming.current || !pieces) return;
+    if (warming.current || !meshRef.current) return;
 
     const t = state.clock.getElapsedTime();
-    const targetRoom = E.room;
-
-    const targetOpacity = targetRoom === -1 ? 1 : 0;
+    const dummy = new THREE.Object3D();
+    
+    const targetOpacity = E.room === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
-    // Use H.i for scroll progress as exported by progress.ts
+    // Fixed shatter: Uses H.i from your progress.ts
     const hAny = H as any;
-    const shatterFactor = targetRoom === -1 ? (hAny.i ?? 0) : 1.2;
+    const shatter = E.room === -1 ? (hAny.i || 0) : 1.2;
 
-    pieces.forEach((p: Piece) => {
-      if (p.layer === "hidden") {
-        p.mesh.visible = false;
-        return;
-      }
+    pieces.forEach((p: Piece, i: number) => {
+      dummy.matrix.fromArray(instanceMatrix, i * 16);
+      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
 
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatterFactor);
-      p.mesh.position.lerp(targetPos, 0.08);
+      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatter);
+      dummy.position.lerp(targetPos, 0.08);
 
       const rotSpeed = 0.2 * (p.spin?.x || 1);
-      p.mesh.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
-      p.mesh.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
+      dummy.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
+      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
+
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
     });
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
-  return <primitive object={scene} />;
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[nodes.Cortex.geometry, material, pieces.length]}
+      frustumCulled={true}
+    >
+      <instancedBufferAttribute 
+        attach="instanceMatrix" 
+        count={pieces.length} 
+        array={instanceMatrix} 
+        itemSize={16} 
+      />
+      <instancedBufferAttribute 
+        attach="instanceColor" 
+        count={pieces.length} 
+        array={colors} 
+        itemSize={3} 
+      />
+    </instancedMesh>
+  );
 }
