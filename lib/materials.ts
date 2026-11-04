@@ -4,8 +4,8 @@ import * as THREE from 'three';
 export const materials = {
   organic: () => {
     const mat = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color('#e5d1c5'),
-      roughness: 0.55,
+      color: new THREE.Color('#ffffff'),
+      roughness: 0.58,
       metalness: 0.05,
       reflectivity: 0.5,
       clearcoat: 0.45,
@@ -105,7 +105,7 @@ export const materials = {
       );
     };
 
-    mat.customProgramCacheKey = () => 'photo-organic-v200';
+    mat.customProgramCacheKey = () => 'photo-v45';
     return mat;
   }
 };

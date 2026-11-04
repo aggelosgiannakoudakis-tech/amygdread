@@ -15,7 +15,6 @@ interface BrainModelProps {
 }
 
 export default function BrainModel({ onReady }: BrainModelProps) {
-  // Path verification: Ensure this file is in public/models/brain-transformed.glb
   const { nodes, scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
@@ -70,7 +69,7 @@ export default function BrainModel({ onReady }: BrainModelProps) {
 
     if (!material.visible) return;
 
-    // Fixed shatter: Uses H.i from your progress.ts
+    // Use H.i for scroll shatter as defined in your state
     const hAny = H as any;
     const shatter = E.room === -1 ? (hAny.i || 0) : 1.2;
 
@@ -100,15 +99,11 @@ export default function BrainModel({ onReady }: BrainModelProps) {
     >
       <instancedBufferAttribute 
         attach="instanceMatrix" 
-        count={pieces.length} 
-        array={instanceMatrix} 
-        itemSize={16} 
+        args={[instanceMatrix, 16]} 
       />
       <instancedBufferAttribute 
         attach="instanceColor" 
-        count={pieces.length} 
-        array={colors} 
-        itemSize={3} 
+        args={[colors, 3]} 
       />
     </instancedMesh>
   );
