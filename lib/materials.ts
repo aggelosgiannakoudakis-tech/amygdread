@@ -3,7 +3,6 @@ import * as THREE from 'three'
 
 let cachedTex: THREE.CanvasTexture | null = null
 
-// Generates high-resolution anatomical tissue map (capillaries, mottling, cellular grain)
 function getTissueTexture(): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null
   if (cachedTex) return cachedTex
@@ -29,7 +28,6 @@ function getTissueTexture(): THREE.CanvasTexture | null {
         fn(ox, oy)
   }
 
-  // Draw intricate blood vessel network
   const drawVessel = (x: number, y: number, angle: number, len: number, width: number, depth: number) => {
     if (depth <= 0 || width < 0.3) return
     const steps = 16
@@ -44,10 +42,10 @@ function getTissueTexture(): THREE.CanvasTexture | null {
       const ny = cy + Math.sin(ca) * stepLen
       drawWrapped((ox, oy) => {
         ctx.lineCap = 'round'
-        ctx.strokeStyle = `rgba(180, 45, 35, ${Math.min(0.55, w * 0.14)})`
+        ctx.strokeStyle = `rgba(220, 40, 35, ${Math.min(0.6, w * 0.15)})`
         ctx.lineWidth = w * 3.2
         ctx.beginPath(); ctx.moveTo(cx + ox, cy + oy); ctx.lineTo(nx + ox, ny + oy); ctx.stroke()
-        ctx.strokeStyle = `rgba(230, 75, 65, ${Math.min(0.95, 0.45 + w * 0.28)})`
+        ctx.strokeStyle = `rgba(255, 80, 70, ${Math.min(0.95, 0.5 + w * 0.3)})`
         ctx.lineWidth = w
         ctx.beginPath(); ctx.moveTo(cx + ox, cy + oy); ctx.lineTo(nx + ox, ny + oy); ctx.stroke()
       })
@@ -75,7 +73,6 @@ function getTissueTexture(): THREE.CanvasTexture | null {
       const ux = (x / size) * tau
       const idx = (y * size + x) * 4
 
-      // Multi-scale noise for realistic brain tissue breakup
       const macro =
         Math.sin(ux * 1.8 + Math.cos(vy * 2.1)) * 0.45 +
         Math.cos(ux * 3.2 - Math.sin(vy * 2.6)) * 0.35 +
@@ -91,7 +88,6 @@ function getTissueTexture(): THREE.CanvasTexture | null {
 
       const mottle = macro * 0.45 + mid * 0.35 + micro * 0.20
 
-      // Red = Vessels, Green = Tissue Mottling, Blue = Cellular Pores
       d[idx + 1] = Math.max(0, Math.min(255, Math.round(128 + mottle * 125)))
       d[idx + 2] = Math.max(0, Math.min(255, Math.round(128 + micro * 115)))
     }
@@ -147,7 +143,6 @@ uniform sampler2D uTissueTex;`
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-// Power tri-planar weights for sharp normal direction mapping
 vec3 aw = abs(vObjN);
 aw = pow(aw, vec3(4.0));
 aw /= (aw.x + aw.y + aw.z + 1e-4);
@@ -162,7 +157,6 @@ vec4 tY = texture2D(uTissueTex, uvY);
 vec4 tZ = texture2D(uTissueTex, uvZ);
 vec4 t1 = tX * aw.x + tY * aw.y + tZ * aw.z;
 
-// High-frequency secondary octave
 vec4 tX2 = texture2D(uTissueTex, uvX * 3.2 + 0.19);
 vec4 tY2 = texture2D(uTissueTex, uvY * 3.2 + 0.19);
 vec4 tZ2 = texture2D(uTissueTex, uvZ * 3.2 + 0.19);
@@ -174,57 +168,37 @@ float noiseVal = clamp(mottle * 0.6 + micro * 0.4, -1.0, 1.0);
 
 vec3 base = diffuseColor.rgb;
 
-// --- HYPER-REALISTIC CADAVERIC COLOR PALETTE ---
-// 1. Gyrus crowns: Pale wet cream/ivory (kills the brown clay look)
-vec3 crownColor   = vec3(0.94, 0.88, 0.80);
-// 2. Mid tissue: Moist anatomical tan
-vec3 fleshColor   = vec3(0.74, 0.58, 0.49);
-// 3. Deep sulci folds: Dark coagulated blood / dark brown
-vec3 creviceColor = vec3(0.24, 0.14, 0.11);
-// 4. Capillary red
-vec3 vesselColor  = vec3(0.48, 0.12, 0.10);
+// Organic grain modulation preserving individual layer colors (black cortex vs vivid red nerves)
+float grain = 0.82 + 0.36 * (noiseVal * 0.5 + 0.5);
 
-float crownMask = smoothstep(0.10, 0.70, noiseVal);
-float darkMask  = 1.0 - smoothstep(-0.5, 0.25, noiseVal);
-
-vec3 tissue = mix(fleshColor, crownColor, crownMask * 0.85);
-tissue = mix(tissue, creviceColor, darkMask * 0.88);
-
-// High-frequency organic speckling
-tissue *= (0.88 + 0.24 * micro);
-
-diffuseColor.rgb = mix(base, tissue, clamp(uAmp * 1.3, 0.0, 1.0));
-
-// Capillary vascular branches
-float vesselMask = clamp(t1.r * 2.2 * uVeins, 0.0, 1.0);
-vec3 vCol = mix(diffuseColor.rgb * vec3(0.60, 0.18, 0.16), vesselColor, vesselMask);
-diffuseColor.rgb = mix(diffuseColor.rgb, vCol, vesselMask * 0.75);
-
-// Orientation-based crevice ambient occlusion
+// Sulcus fold shadow
 float sulcusShadow = smoothstep(0.05, 0.80, abs(vObjN.y));
-diffuseColor.rgb *= mix(0.48, 1.0, sulcusShadow);
+
+// Apply grain modulation onto base layer color
+diffuseColor.rgb = base * grain;
+
+// Deep crevice ambient occlusion
+diffuseColor.rgb *= mix(0.35, 1.0, sulcusShadow);
 `
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-// Gyrus crowns get wet coat highlights, crevices remain dry
 float wetness = smoothstep(0.1, 0.85, noiseVal);
-roughnessFactor = clamp(roughnessFactor - wetness * 0.25 + (1.0 - sulcusShadow) * 0.20, 0.28, 0.85);
+roughnessFactor = clamp(roughnessFactor - wetness * 0.22 + (1.0 - sulcusShadow) * 0.15, 0.25, 0.85);
 `
       )
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-// Subsurface warmth at edge terminators
 vec3 lightTot = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
 float lightLum = dot(lightTot, vec3(0.299, 0.587, 0.114));
 float terminator = smoothstep(0.01, 0.22, lightLum) * (1.0 - smoothstep(0.22, 0.68, lightLum));
-reflectedLight.directDiffuse += vec3(0.24, 0.06, 0.03) * diffuseColor.rgb * terminator * 1.0;
+reflectedLight.directDiffuse += vec3(0.25, 0.04, 0.03) * diffuseColor.rgb * terminator * 0.8;
 `
       )
   }
 
-  m.customProgramCacheKey = () => `organic-cadaver-v8-${k}-${amp}-${veins}`
+  m.customProgramCacheKey = () => `organic-black-red-v2-${k}-${amp}-${veins}`
   return m
 }
