@@ -15,103 +15,81 @@ interface BrainModelProps {
 }
 
 export default function BrainModel({ onReady }: BrainModelProps) {
-  // 404 check: If the GLB is missing, this will throw, but R3F Suspense handles it.
-  const { nodes, scene } = useGLTF("/models/brain-transformed.glb") as any;
+  const { scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
-
-  const brainAlbedo = useMemo(() => {
-    if (typeof window === 'undefined') return null;
-    const tex = new THREE.TextureLoader().load("/textures/brain_albedo.jpg");
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    return tex;
-  }, []);
-
-  const meshRef = useRef<THREE.InstancedMesh>(null!);
   const warming = useRef(true);
 
   const { pieces } = useMemo(() => buildPieces(scene), [scene]);
-  const material = useMemo(() => materials.organic(brainAlbedo), [brainAlbedo]);
+
+  const material = useMemo(() => materials.organic(), []);
+
+  useEffect(() => {
+    if (!pieces) return;
+    pieces.forEach((p: Piece) => {
+      if (p.mesh) {
+        p.mesh.material = material;
+      }
+    });
+  }, [pieces, material]);
 
   useEffect(() => {
     let active = true;
-    const compile = async () => {
+
+    const compileBoth = async () => {
       try {
         material.transparent = false;
-        await gl.compileAsync(meshRef.current, camera);
+        material.depthWrite = true;
+        await gl.compileAsync(scene, camera);
+
         material.transparent = true;
-        await gl.compileAsync(meshRef.current, camera);
-      } catch (e) {}
+        await gl.compileAsync(scene, camera);
+      } catch (e) {
+        // Compile warning ignored
+      }
+
       if (active) {
         warming.current = false;
         onReady?.();
       }
     };
-    compile();
-    return () => { active = false; };
-  }, [gl, camera, material, onReady]);
 
-  const { instanceMatrix, colors } = useMemo(() => {
-    const matrix = new Float32Array(pieces.length * 16);
-    const colorArr = new Float32Array(pieces.length * 3);
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color("#ffffff");
+    compileBoth();
 
-    pieces.forEach((p: Piece, i: number) => {
-      dummy.position.copy(p.home);
-      dummy.updateMatrix();
-      dummy.matrix.toArray(matrix, i * 16);
-      color.toArray(colorArr, i * 3);
-    });
-    return { instanceMatrix: matrix, colors: colorArr };
-  }, [pieces]);
+    return () => {
+      active = false;
+    };
+  }, [gl, camera, scene, material, onReady]);
 
   useFrame((state) => {
-    if (warming.current || !meshRef.current) return;
+    if (warming.current || !pieces) return;
 
     const t = state.clock.getElapsedTime();
-    const dummy = new THREE.Object3D();
-    
-    const targetOpacity = E.room === -1 ? 1 : 0;
+    const targetRoom = E.room;
+
+    const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
-    // Fixed: Using H.i as per your progress.ts type
-    const shatter = E.room === -1 ? (H.i || 0) : 1.2;
+    // Use H.i for scroll progress as exported by progress.ts
+    const hAny = H as any;
+    const shatterFactor = targetRoom === -1 ? (hAny.i ?? 0) : 1.2;
 
-    pieces.forEach((p: Piece, i: number) => {
-      dummy.matrix.fromArray(instanceMatrix, i * 16);
-      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+    pieces.forEach((p: Piece) => {
+      if (p.layer === "hidden") {
+        p.mesh.visible = false;
+        return;
+      }
 
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatter);
-      dummy.position.lerp(targetPos, 0.08);
+      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatterFactor);
+      p.mesh.position.lerp(targetPos, 0.08);
 
       const rotSpeed = 0.2 * (p.spin?.x || 1);
-      dummy.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
-      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
-
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      p.mesh.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
+      p.mesh.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
     });
-
-    meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[nodes.Cortex.geometry, material, pieces.length]}
-      frustumCulled={true}
-    >
-      <instancedBufferAttribute 
-        attach="instanceMatrix" 
-        args={[instanceMatrix, 16]} 
-      />
-      <instancedBufferAttribute 
-        attach="instanceColor" 
-        args={[colors, 3]} 
-      />
-    </instancedMesh>
-  );
+  return <primitive object={scene} />;
 }
