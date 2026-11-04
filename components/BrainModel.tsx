@@ -3,7 +3,7 @@
 
 import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, useTexture } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
@@ -11,6 +11,17 @@ import { E } from "../lib/enter";
 import { H } from "../lib/progress";
 
 const _targetPos = new THREE.Vector3();
+
+// 1x1 organic pink-red fallback texture used while the photo loads (or if the path 404s)
+function createFallbackTexture() {
+  const data = new Uint8Array([195, 115, 110, 255]);
+  const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
 
 export interface BrainModelProps {
   onReady?: () => void;
@@ -20,21 +31,46 @@ export default function BrainModel({ onReady }: BrainModelProps) {
   const { scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
-  const brainAlbedo = useTexture("/textures/brain_albedo.jpg", (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = Math.min(gl.capabilities.getMaxAnisotropy(), 16);
-    tex.needsUpdate = true;
-  });
+  // Keep latest onReady in a ref so parent re-renders don't cancel the startup effect
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  const material = useMemo(() => {
+    const fallbackTex = createFallbackTexture();
+    return materials.organic(fallbackTex);
+  }, []);
+
+  // Load the photo texture non-blockingly so it can never crash <Suspense>
+  useEffect(() => {
+    const loader = new THREE.TextureLoader();
+    // ⚠️ Make sure this filename matches your exact file in public/textures/
+    loader.load(
+      "/textures/brain_albedo.jpg",
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = Math.min(gl.capabilities.getMaxAnisotropy(), 16);
+        tex.needsUpdate = true;
+
+        if (material.userData.uTexAlbedo) {
+          material.userData.uTexAlbedo.value = tex;
+        }
+        material.needsUpdate = true;
+      },
+      undefined,
+      (err) => {
+        console.error(
+          "Could not load /textures/brain_albedo.jpg — check the filename inside public/textures/",
+          err
+        );
+      }
+    );
+  }, [gl, material]);
 
   const { pieces } = useMemo(() => {
     return buildPieces(scene);
   }, [scene]);
-
-  const material = useMemo(() => {
-    return materials.organic(brainAlbedo);
-  }, [brainAlbedo]);
 
   useEffect(() => {
     if (!pieces) return;
@@ -49,28 +85,37 @@ export default function BrainModel({ onReady }: BrainModelProps) {
 
   useEffect(() => {
     let active = true;
+
+    const withTimeout = (promise: Promise<any>, ms: number) =>
+      Promise.race([
+        promise,
+        new Promise((resolve) => setTimeout(resolve, ms)),
+      ]);
+
     const compileBoth = async () => {
       try {
-        material.transparent = false;
-        material.depthWrite = true;
-        await gl.compileAsync(scene, camera);
-
         material.transparent = true;
-        await gl.compileAsync(scene, camera);
+        material.depthWrite = true;
+        if (typeof gl.compileAsync === "function") {
+          await withTimeout(gl.compileAsync(scene, camera), 1500);
+        } else {
+          gl.compile(scene, camera);
+        }
       } catch (e) {
         console.warn("Shader compilation warning:", e);
       }
 
       if (active) {
         warming.current = false;
-        onReady?.();
+        onReadyRef.current?.();
       }
     };
+
     compileBoth();
     return () => {
       active = false;
     };
-  }, [gl, camera, scene, material, onReady]);
+  }, [gl, camera, scene, material]);
 
   useFrame((state) => {
     if (warming.current || !pieces) return;
