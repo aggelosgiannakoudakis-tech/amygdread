@@ -12,11 +12,14 @@ import { H } from "../lib/progress";
 
 const _targetPos = new THREE.Vector3();
 
-export default function BrainModel() {
+export interface BrainModelProps {
+  onReady?: () => void;
+}
+
+export default function BrainModel({ onReady }: BrainModelProps) {
   const { scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
-  // Ensure this path matches your file inside public/textures/
   const brainAlbedo = useTexture("/textures/brain_albedo.jpg", (tex) => {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = THREE.RepeatWrapping;
@@ -60,13 +63,14 @@ export default function BrainModel() {
 
       if (active) {
         warming.current = false;
+        onReady?.();
       }
     };
     compileBoth();
     return () => {
       active = false;
     };
-  }, [gl, camera, scene, material]);
+  }, [gl, camera, scene, material, onReady]);
 
   useFrame((state) => {
     if (warming.current || !pieces) return;
