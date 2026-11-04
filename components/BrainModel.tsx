@@ -5,7 +5,7 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import pieces from "../lib/pieces";
+import * as PiecesData from "../lib/pieces"; // Bulletproof import
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 
@@ -13,6 +13,9 @@ export default function BrainModel() {
   const { nodes } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl } = useThree();
   
+  // Get pieces array regardless of export style
+  const pieces = (PiecesData as any).pieces || (PiecesData as any).default || [];
+
   // Load the photographic texture
   const brainAlbedo = useTexture("/textures/brain_albedo.jpg");
   brainAlbedo.wrapS = brainAlbedo.wrapT = THREE.RepeatWrapping;
@@ -20,7 +23,6 @@ export default function BrainModel() {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const warming = useRef(true);
 
-  // Create the material using the photo
   const material = useMemo(() => materials.organic(brainAlbedo), [brainAlbedo]);
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function BrainModel() {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
 
-    pieces.forEach((p, i) => {
+    pieces.forEach((p: any, i: number) => {
       dummy.position.copy(p.pos);
       dummy.rotation.set(p.rot.x, p.rot.y, p.rot.z);
       dummy.updateMatrix();
@@ -53,7 +55,7 @@ export default function BrainModel() {
       color.toArray(colorArr, i * 3);
     });
     return { instanceMatrix: matrix, colors: colorArr };
-  }, []);
+  }, [pieces]);
 
   useFrame((state) => {
     if (warming.current || !meshRef.current) return;
@@ -66,7 +68,7 @@ export default function BrainModel() {
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
-    pieces.forEach((p, i) => {
+    pieces.forEach((p: any, i: number) => {
       const pIdx = i * 16;
       dummy.matrix.fromArray(instanceMatrix, pIdx);
       dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);

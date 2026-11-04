@@ -5,16 +5,14 @@ export const materials = {
   organic: (texAlbedo: THREE.Texture | null) => {
     const mat = new THREE.MeshPhysicalMaterial({
       color: '#ffffff',
-      roughness: 0.65,
-      metalness: 0.05,
+      roughness: 0.6,
+      metalness: 0.02,
       reflectivity: 0.5,
-      clearcoat: 0.4,
-      clearcoatRoughness: 0.3,
-      sheen: 0.2,
+      clearcoat: 0.5, // High clearcoat for wetness
+      clearcoatRoughness: 0.2,
+      sheen: 0.3,
       sheenRoughness: 0.5,
       sheenColor: new THREE.Color('#ffccaa'),
-      transmission: 0,
-      thickness: 0,
     });
 
     mat.onBeforeCompile = (shader) => {
@@ -49,19 +47,22 @@ export const materials = {
       shader.fragmentShader = shader.fragmentShader.replace(
         `#include <map_fragment>`,
         `
+        // Tri-planar blending weights
         vec3 blending = abs(vNormalVec);
         blending /= (blending.x + blending.y + blending.z);
 
-        float scale = 0.45; 
+        // Texture Projection Scale - Adjust 0.5 to change texture density
+        float scale = 0.5; 
         vec3 xTex = texture2D(uTexAlbedo, vPos.yz * scale).rgb;
         vec3 yTex = texture2D(uTexAlbedo, vPos.xz * scale).rgb;
         vec3 zTex = texture2D(uTexAlbedo, vPos.xy * scale).rgb;
         
+        // Blend photo projections
         vec3 texColor = xTex * blending.x + yTex * blending.y + zTex * blending.z;
 
-        // Biological Sulcus Darkening
+        // Darken deep crevices (Sulcus shading)
         float sulcus = smoothstep(0.1, 0.9, abs(vNormalVec.y));
-        texColor *= mix(0.65, 1.0, sulcus);
+        texColor *= mix(0.6, 1.0, sulcus);
 
         diffuseColor.rgb = texColor;
         `
@@ -70,14 +71,14 @@ export const materials = {
       shader.fragmentShader = shader.fragmentShader.replace(
         `#include <roughnessmap_fragment>`,
         `#include <roughnessmap_fragment>
+         // Make darker parts of the photo (veins/crevices) wetter/shinier
          float photoLum = dot(texColor, vec3(0.299, 0.587, 0.114));
-         roughnessFactor *= mix(1.3, 0.7, photoLum);
+         roughnessFactor *= mix(0.5, 1.2, photoLum);
         `
       );
     };
 
-    mat.customProgramCacheKey = () => 'photo-organic-v2';
-
+    mat.customProgramCacheKey = () => 'photo-organic-v3';
     return mat;
   }
 };
