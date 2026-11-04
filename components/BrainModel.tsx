@@ -5,7 +5,7 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import { pieces } from "../lib/pieces";
+import pieces from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 
@@ -13,14 +13,14 @@ export default function BrainModel() {
   const { nodes } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl } = useThree();
   
-  // 1. Load your photographic texture
+  // Load the photographic texture
   const brainAlbedo = useTexture("/textures/brain_albedo.jpg");
   brainAlbedo.wrapS = brainAlbedo.wrapT = THREE.RepeatWrapping;
 
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const warming = useRef(true);
 
-  // 2. Create the material using the photo
+  // Create the material using the photo
   const material = useMemo(() => materials.organic(brainAlbedo), [brainAlbedo]);
 
   useEffect(() => {
@@ -49,7 +49,6 @@ export default function BrainModel() {
       dummy.updateMatrix();
       dummy.matrix.toArray(matrix, i * 16);
       
-      // Keep base color neutral so photo albedo dominates
       color.set("#ffffff");
       color.toArray(colorArr, i * 3);
     });
@@ -63,7 +62,6 @@ export default function BrainModel() {
     const dummy = new THREE.Object3D();
     const targetRoom = E.room;
     
-    // Smooth opacity transition
     const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
