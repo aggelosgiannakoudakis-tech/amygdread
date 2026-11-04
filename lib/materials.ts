@@ -32,12 +32,14 @@ export const materials = {
       shader.vertexShader = shader.vertexShader.replace(
         `#include <beginnormal_vertex>`,
         `#include <beginnormal_vertex>
+         // Correctly handle normals for instanced pieces
          vWNorm = normalize(mat3(instanceMatrix) * mat3(modelMatrix) * objectNormal);`
       );
 
       shader.vertexShader = shader.vertexShader.replace(
         `#include <begin_vertex>`,
         `#include <begin_vertex>
+         // Correctly handle positions for instanced pieces
          vWPos = (instanceMatrix * modelMatrix * vec4(position, 1.0)).xyz;`
       );
 
@@ -54,6 +56,7 @@ export const materials = {
         vec3 blending = abs(vWNorm);
         blending /= (blending.x + blending.y + blending.z + 0.001);
 
+        // Photo projection scale
         float scale = 0.4;
         vec3 xTex = texture2D(uTexAlbedo, vWPos.yz * scale).rgb;
         vec3 yTex = texture2D(uTexAlbedo, vWPos.xz * scale).rgb;
@@ -61,7 +64,7 @@ export const materials = {
         
         vec3 photoColor = xTex * blending.x + yTex * blending.y + zTex * blending.z;
 
-        // Biological crevice shading
+        // Biological sulcus shading (darkens internal folds)
         float sulcus = smoothstep(0.1, 0.9, abs(vWNorm.y));
         photoColor *= mix(0.6, 1.0, sulcus);
 
@@ -70,7 +73,7 @@ export const materials = {
       );
     };
 
-    mat.customProgramCacheKey = () => 'photo-v10';
+    mat.customProgramCacheKey = () => 'photo-v12';
     return mat;
   }
 };
