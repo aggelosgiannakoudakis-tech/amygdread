@@ -15,15 +15,15 @@ const mk = (o: THREE.MeshPhysicalMaterialParameters) =>
   organic(
     new THREE.MeshPhysicalMaterial({
       side: THREE.DoubleSide,
-      roughness: 0.62,
+      roughness: 0.58,
       metalness: 0,
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.62,
-      specularIntensity: 0.35,
-      sheen: 0.4,
-      sheenColor: new THREE.Color('#c4a090'),
-      sheenRoughness: 0.55,
-      envMapIntensity: 0.55,
+      clearcoat: 0.22,
+      clearcoatRoughness: 0.5,
+      specularIntensity: 0.4,
+      sheen: 0.3,
+      sheenColor: new THREE.Color('#d4b5a0'),
+      sheenRoughness: 0.5,
+      envMapIntensity: 0.6,
       transparent: false,
       depthWrite: true,
       opacity: 1,
@@ -35,25 +35,23 @@ const mk = (o: THREE.MeshPhysicalMaterialParameters) =>
   )
 
 function makeMaterials() {
-  const cortex = [0, 1, 2, 3].map((i) =>
+  const cortex = [0, 1, 2, 3].map(() =>
     mk({
-      color: new THREE.Color('#9a7a68').offsetHSL(0.008 * (i - 1.5), 0.04 * (i - 1.5), 0.025 * (i - 1.5)),
-      sheenColor: new THREE.Color('#b89582'),
+      color: new THREE.Color('#ffffff'),
     })
   )
   const sulcus = mk({
-    color: '#6b4e42',
-    roughness: 0.70,
-    clearcoat: 0.12,
-    clearcoatRoughness: 0.7,
+    color: '#d0c0b0',
+    roughness: 0.65,
+    clearcoat: 0.15,
   })
   const m: Record<Exclude<Layer, 'hidden' | 'cortex'>, THREE.Material> = {
-    cerebellum: mk({ color: '#8a6d5c', roughness: 0.68 }),
-    deep: mk({ color: '#7a5e4e', roughness: 0.64 }),
-    tract: mk({ color: '#b5a48f', roughness: 0.72, clearcoat: 0.08 }),
-    vessel: mk({ color: '#6e1c24', roughness: 0.45, clearcoat: 0.35, clearcoatRoughness: 0.4 }),
-    nerve: mk({ color: '#b8a888', roughness: 0.7, clearcoat: 0.1 }),
-    amygdala: mk({ color: '#8a5a50', roughness: 0.65 }),
+    cerebellum: mk({ color: '#e8dad0', roughness: 0.65 }),
+    deep: mk({ color: '#d8c4b8', roughness: 0.62 }),
+    tract: mk({ color: '#f0e6dc', roughness: 0.70, clearcoat: 0.08 }),
+    vessel: mk({ color: '#a03030', roughness: 0.45, clearcoat: 0.35 }),
+    nerve: mk({ color: '#e0d8c0', roughness: 0.68 }),
+    amygdala: mk({ color: '#c8a898', roughness: 0.65 }),
   }
   return { cortex, sulcus, m }
 }
