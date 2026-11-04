@@ -5,107 +5,80 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import * as PiecesData from "../lib/pieces"; // Bulletproof import
+import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 
 export default function BrainModel() {
-  const { nodes } = useGLTF("/models/brain-transformed.glb") as any;
-  const { gl } = useThree();
-  
-  // Get pieces array regardless of export style
-  const pieces = (PiecesData as any).pieces || (PiecesData as any).default || [];
+  const { scene } = useGLTF("/models/brain-transformed.glb") as any;
+  const { gl, camera } = useThree();
 
-  // Load the photographic texture
   const brainAlbedo = useTexture("/textures/brain_albedo.jpg");
-  brainAlbedo.wrapS = brainAlbedo.wrapT = THREE.RepeatWrapping;
 
-  const meshRef = useRef<THREE.InstancedMesh>(null!);
-  const warming = useRef(true);
+  const { pieces } = useMemo(() => {
+    return buildPieces(scene);
+  }, [scene]);
 
-  const material = useMemo(() => materials.organic(brainAlbedo), [brainAlbedo]);
+  const material = useMemo(() => {
+    return materials.organic(brainAlbedo);
+  }, [brainAlbedo]);
 
   useEffect(() => {
+    pieces.forEach((p: Piece) => {
+      p.mesh.material = material;
+    });
+  }, [pieces, material]);
+
+  const warming = useRef(true);
+
+  useEffect(() => {
+    let active = true;
     const compileBoth = async () => {
       material.transparent = false;
       material.depthWrite = true;
-      await gl.compileAsync(meshRef.current, meshRef.current.parent || meshRef.current, null);
-      
+      await gl.compileAsync(scene, camera);
+
       material.transparent = true;
-      await gl.compileAsync(meshRef.current, meshRef.current.parent || meshRef.current, null);
-      
-      warming.current = false;
+      await gl.compileAsync(scene, camera);
+
+      if (active) {
+        warming.current = false;
+      }
     };
     compileBoth();
-  }, [gl, material]);
-
-  const { instanceMatrix, colors } = useMemo(() => {
-    const matrix = new Float32Array(pieces.length * 16);
-    const colorArr = new Float32Array(pieces.length * 3);
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
-
-    pieces.forEach((p: any, i: number) => {
-      dummy.position.copy(p.pos);
-      dummy.rotation.set(p.rot.x, p.rot.y, p.rot.z);
-      dummy.updateMatrix();
-      dummy.matrix.toArray(matrix, i * 16);
-      
-      color.set("#ffffff");
-      color.toArray(colorArr, i * 3);
-    });
-    return { instanceMatrix: matrix, colors: colorArr };
-  }, [pieces]);
+    return () => {
+      active = false;
+    };
+  }, [gl, camera, scene, material]);
 
   useFrame((state) => {
-    if (warming.current || !meshRef.current) return;
+    if (warming.current) return;
 
     const t = state.clock.getElapsedTime();
-    const dummy = new THREE.Object3D();
     const targetRoom = E.room;
-    
+
     const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
-    pieces.forEach((p: any, i: number) => {
-      const pIdx = i * 16;
-      dummy.matrix.fromArray(instanceMatrix, pIdx);
-      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+    if (!material.visible) return;
 
-      const explode = targetRoom === -1 ? E.room0Factor : 1.2;
-      const targetPos = p.pos.clone().multiplyScalar(explode);
-      dummy.position.lerp(targetPos, 0.08);
+    const currentFactor = targetRoom === -1 ? E.room0Factor : 1.2;
 
-      const rotSpeed = 0.2 * p.speed;
-      dummy.rotation.x += Math.sin(t * rotSpeed + p.phase) * 0.002;
-      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.phase) * 0.002;
+    pieces.forEach((p: Piece) => {
+      if (p.layer === "hidden") {
+        p.mesh.visible = false;
+        return;
+      }
 
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * currentFactor);
+      p.mesh.position.lerp(targetPos, 0.08);
+
+      const rotSpeed = 0.2 * (p.spin.x || 1);
+      p.mesh.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
+      p.mesh.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
     });
-
-    meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[nodes.Cortex.geometry, material, pieces.length]}
-      frustumCulled={true}
-    >
-      <instancedBufferAttribute
-        attach="instanceMatrix"
-        count={instanceMatrix.length / 16}
-        array={instanceMatrix}
-        itemSize={16}
-      />
-      <instancedBufferAttribute
-        attach="instanceColor"
-        count={colors.length / 3}
-        array={colors}
-        itemSize={3}
-      />
-    </instancedMesh>
-  );
+  return <primitive object={scene} />;
 }
