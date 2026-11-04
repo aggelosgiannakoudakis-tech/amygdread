@@ -1,7 +1,7 @@
 // components/BrainModel.tsx
 "use client";
 
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -12,7 +12,13 @@ import { H } from "../lib/progress";
 
 const _targetPos = new THREE.Vector3();
 
-// 1x1 organic pink-red fallback texture used while the photo loads (or if the path 404s)
+const CANDIDATE_MODELS = [
+  "/brain.glb",
+  "/models/brain.glb",
+  "/brain-transformed.glb",
+  "/models/brain-transformed.glb",
+];
+
 function createFallbackTexture() {
   const data = new Uint8Array([195, 115, 110, 255]);
   const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
@@ -28,10 +34,55 @@ export interface BrainModelProps {
 }
 
 export default function BrainModel({ onReady }: BrainModelProps) {
-  const { scene } = useGLTF("/models/brain-transformed.glb") as any;
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    let active = true;
+
+    const findModel = async () => {
+      for (const url of CANDIDATE_MODELS) {
+        try {
+          const res = await fetch(url, { method: "HEAD" });
+          if (res.ok) {
+            if (active) setModelUrl(url);
+            return;
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+      console.error(
+        "Could not find brain GLB at any of:",
+        CANDIDATE_MODELS,
+        "— check your public/ folder!"
+      );
+      // Unblock loading screen even if the GLB is missing
+      if (active) onReadyRef.current?.();
+    };
+
+    findModel();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!modelUrl) return null;
+
+  return <BrainModelInner modelUrl={modelUrl} onReady={onReady} />;
+}
+
+function BrainModelInner({
+  modelUrl,
+  onReady,
+}: {
+  modelUrl: string;
+  onReady?: () => void;
+}) {
+  const { scene } = useGLTF(modelUrl) as any;
   const { gl, camera } = useThree();
 
-  // Keep latest onReady in a ref so parent re-renders don't cancel the startup effect
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
@@ -40,10 +91,9 @@ export default function BrainModel({ onReady }: BrainModelProps) {
     return materials.organic(fallbackTex);
   }, []);
 
-  // Load the photo texture non-blockingly so it can never crash <Suspense>
   useEffect(() => {
     const loader = new THREE.TextureLoader();
-    // ⚠️ Make sure this filename matches your exact file in public/textures/
+    // ⚠️ Make sure this matches the exact filename inside your public/textures/ folder
     loader.load(
       "/textures/brain_albedo.jpg",
       (tex) => {
@@ -60,8 +110,8 @@ export default function BrainModel({ onReady }: BrainModelProps) {
       },
       undefined,
       (err) => {
-        console.error(
-          "Could not load /textures/brain_albedo.jpg — check the filename inside public/textures/",
+        console.warn(
+          "Texture /textures/brain_albedo.jpg not found, using fallback:",
           err
         );
       }
