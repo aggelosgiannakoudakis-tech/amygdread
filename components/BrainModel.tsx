@@ -8,92 +8,87 @@ import * as THREE from "three";
 import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
-import { H } from "../lib/progress";
+import { P, S, LOAD } from "../lib/progress";
 
-interface BrainModelProps {
-  onReady?: () => void;
+const _targetPos = new THREE.Vector3();
+
+function createFallbackTexture() {
+  const data = new Uint8Array([128, 128, 255, 255]);
+  const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
 }
 
-export default function BrainModel({ onReady }: BrainModelProps) {
-  const { scene } = useGLTF("/models/brain-transformed.glb") as any;
+export default function BrainModel({ onReady }: { onReady?: () => void }) {
+  const { scene } = useGLTF("/brain.glb") as any;
   const { gl, camera } = useThree();
 
-  // Background loader prevents React Suspense hangs
-  const brainAlbedo = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load(
-      "/textures/brain_albedo.jpg",
-      (t) => {
-        t.wrapS = THREE.RepeatWrapping;
-        t.wrapT = THREE.RepeatWrapping;
-        t.needsUpdate = true;
-      },
-      undefined,
-      () => {}
-    );
-    return tex;
-  }, []);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
-  const { pieces } = useMemo(() => {
-    return buildPieces(scene);
+  // Build pieces once on the loaded GLB
+  const { pieces, center, size } = useMemo(() => {
+    if (!scene.userData.__builtPieces) {
+      scene.userData.__builtPieces = buildPieces(scene);
+    }
+    return scene.userData.__builtPieces as ReturnType<typeof buildPieces>;
   }, [scene]);
 
-  const material = useMemo(() => {
-    return materials.organic(brainAlbedo);
-  }, [brainAlbedo]);
+  const baseTexture = useMemo(() => createFallbackTexture(), []);
 
+  const material = useMemo(() => {
+    return materials.organic(baseTexture);
+  }, [baseTexture]);
+
+  // Immediately mark model ready and dismiss the loading screen
   useEffect(() => {
-    if (!pieces) return;
     pieces.forEach((p: Piece) => {
       if (p.mesh) {
         p.mesh.material = material;
       }
     });
-  }, [pieces, material]);
 
-  const warming = useRef(true);
+    S.pieces = pieces;
+    S.norm = { c: center, s: size };
+    S.remaining = 1;
+    LOAD.model = true;
 
+    try {
+      gl.compile(scene, camera);
+    } catch {}
+
+    onReadyRef.current?.();
+  }, [pieces, center, size, material, gl, scene, camera]);
+
+  // Load /textures/brain_albedo.jpg via plain HTML Image so it never blocks Suspense or DefaultLoadingManager
   useEffect(() => {
     let active = true;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (!active) return;
+      const tex = new THREE.Texture(img);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = Math.min(gl.capabilities.getMaxAnisotropy(), 16);
+      tex.needsUpdate = true;
 
-    // Guaranteed fallback: dismiss loader screen within 600ms
-    const timer = setTimeout(() => {
-      if (active && warming.current) {
-        warming.current = false;
-        onReady?.();
+      if (material.userData?.uTexAlbedo) {
+        material.userData.uTexAlbedo.value = tex;
       }
-    }, 600);
-
-    const compileBoth = async () => {
-      try {
-        material.transparent = false;
-        material.depthWrite = true;
-        await gl.compileAsync(scene, camera);
-
-        material.transparent = true;
-        await gl.compileAsync(scene, camera);
-      } catch (e) {
-        // Shader warning safely ignored
-      }
-
-      if (active && warming.current) {
-        warming.current = false;
-        onReady?.();
-        clearTimeout(timer);
-      }
+      material.needsUpdate = true;
     };
-
-    compileBoth();
+    img.src = "/textures/brain_albedo.jpg";
 
     return () => {
       active = false;
-      clearTimeout(timer);
     };
-  }, [gl, camera, scene, material, onReady]);
+  }, [gl, material]);
 
   useFrame((state) => {
-    if (warming.current || !pieces) return;
+    if (!pieces || pieces.length === 0) return;
 
     const t = state.clock.getElapsedTime();
     const targetRoom = E.room;
@@ -104,24 +99,33 @@ export default function BrainModel({ onReady }: BrainModelProps) {
 
     if (!material.visible) return;
 
-    // Safe access to progress to bypass strict Next.js TypeScript errors
-    const hAny = H as any;
-    const shatterFactor = targetRoom === -1 ? (hAny.p ?? hAny.i ?? 0) : 1.2;
+    const prog = P.value;
+    let rem = 0;
 
-    pieces.forEach((p: Piece) => {
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i];
       if (p.layer === "hidden") {
         p.mesh.visible = false;
-        return;
+        continue;
       }
 
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatterFactor);
-      p.mesh.position.lerp(targetPos, 0.08);
+      let u = targetRoom === -1 ? THREE.MathUtils.clamp((prog - p.start) / p.dur, 0, 1) : 1;
+      u = u * u * (3 - 2 * u);
+      rem += 1 - u;
 
-      const rotSpeed = 0.2 * (p.spin?.x || 1);
-      p.mesh.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
-      p.mesh.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
-    });
+      _targetPos.copy(p.home).addScaledVector(p.dir, p.dist * u);
+      p.mesh.position.lerp(_targetPos, 0.12);
+
+      const rotSpeed = 0.2 * (p.spin.x || 1);
+      p.mesh.rotation.x = p.spin.x * u + Math.sin(t * rotSpeed + p.h) * 0.0015;
+      p.mesh.rotation.y = p.spin.y * u + Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
+      p.mesh.rotation.z = p.spin.z * u;
+    }
+
+    S.remaining = rem / Math.max(1, pieces.length);
   });
 
   return <primitive object={scene} />;
 }
+
+useGLTF.preload("/brain.glb");
