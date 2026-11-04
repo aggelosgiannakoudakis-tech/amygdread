@@ -5,7 +5,7 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import { buildPieces } from "../lib/pieces";
+import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 import { H } from "../lib/progress";
@@ -15,7 +15,8 @@ interface BrainModelProps {
 }
 
 export default function BrainModel({ onReady }: BrainModelProps) {
-  const { nodes, scene } = useGLTF("/models/brain.glb") as any;
+  // 404 check: If the GLB is missing, this will throw, but R3F Suspense handles it.
+  const { nodes, scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
   const brainAlbedo = useMemo(() => {
@@ -33,15 +34,6 @@ export default function BrainModel({ onReady }: BrainModelProps) {
 
   useEffect(() => {
     let active = true;
-    
-    // Safety fallback: if anything hangs, force clear the loading screen in 1 second
-    const timeout = setTimeout(() => {
-      if (active && warming.current) {
-        warming.current = false;
-        onReady?.();
-      }
-    }, 1000);
-
     const compile = async () => {
       try {
         material.transparent = false;
@@ -49,15 +41,13 @@ export default function BrainModel({ onReady }: BrainModelProps) {
         material.transparent = true;
         await gl.compileAsync(meshRef.current, camera);
       } catch (e) {}
-      
-      if (active && warming.current) {
+      if (active) {
         warming.current = false;
         onReady?.();
-        clearTimeout(timeout);
       }
     };
     compile();
-    return () => { active = false; clearTimeout(timeout); };
+    return () => { active = false; };
   }, [gl, camera, material, onReady]);
 
   const { instanceMatrix, colors } = useMemo(() => {
@@ -66,7 +56,7 @@ export default function BrainModel({ onReady }: BrainModelProps) {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color("#ffffff");
 
-    pieces.forEach((p: any, i: number) => {
+    pieces.forEach((p: Piece, i: number) => {
       dummy.position.copy(p.home);
       dummy.updateMatrix();
       dummy.matrix.toArray(matrix, i * 16);
@@ -80,18 +70,17 @@ export default function BrainModel({ onReady }: BrainModelProps) {
 
     const t = state.clock.getElapsedTime();
     const dummy = new THREE.Object3D();
-    const targetRoom = E.room;
     
-    const targetOpacity = targetRoom === -1 ? 1 : 0;
+    const targetOpacity = E.room === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
-    // Use H.i for scroll shatter as defined in your progress.ts
-    const shatter = targetRoom === -1 ? (H.i || 0) : 1.2;
+    // Fixed: Using H.i as per your progress.ts type
+    const shatter = E.room === -1 ? (H.i || 0) : 1.2;
 
-    pieces.forEach((p: any, i: number) => {
+    pieces.forEach((p: Piece, i: number) => {
       dummy.matrix.fromArray(instanceMatrix, i * 16);
       dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
 
@@ -99,8 +88,8 @@ export default function BrainModel({ onReady }: BrainModelProps) {
       dummy.position.lerp(targetPos, 0.08);
 
       const rotSpeed = 0.2 * (p.spin?.x || 1);
-      dummy.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.002;
-      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.002;
+      dummy.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
+      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
 
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
@@ -115,8 +104,14 @@ export default function BrainModel({ onReady }: BrainModelProps) {
       args={[nodes.Cortex.geometry, material, pieces.length]}
       frustumCulled={true}
     >
-      <instancedBufferAttribute attach="instanceMatrix" count={pieces.length} array={instanceMatrix} itemSize={16} />
-      <instancedBufferAttribute attach="instanceColor" count={pieces.length} array={colors} itemSize={3} />
+      <instancedBufferAttribute 
+        attach="instanceMatrix" 
+        args={[instanceMatrix, 16]} 
+      />
+      <instancedBufferAttribute 
+        attach="instanceColor" 
+        args={[colors, 3]} 
+      />
     </instancedMesh>
   );
 }
