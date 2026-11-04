@@ -3,118 +3,115 @@
 
 import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
+import { useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import { buildPieces } from "../lib/pieces"; // CORRECTED: Named import
+import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
-import { H } from "../lib/progress";
+import { P, S, LOAD } from "../lib/progress";
 
-interface BrainModelProps {
-  onReady?: () => void;
-}
+const _targetPos = new THREE.Vector3();
 
-export default function BrainModel({ onReady }: BrainModelProps) {
-  const { nodes, scene } = useGLTF("/models/brain-transformed.glb") as any;
+export default function BrainModel({ onReady }: { onReady?: () => void }) {
+  const { scene } = useGLTF("/brain.glb") as any;
   const { gl, camera } = useThree();
 
-  // Load texture via standard loader to avoid React Suspense hang
-  const brainAlbedo = useMemo(() => {
-    if (typeof window === 'undefined') return null;
-    const tex = new THREE.TextureLoader().load("/textures/brain_albedo.jpg");
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    return tex;
-  }, []);
+  const brainAlbedo = useTexture("/textures/brain_albedo.jpg", (tex) => {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = Math.min(gl.capabilities.getMaxAnisotropy(), 16);
+    tex.needsUpdate = true;
+  });
 
-  const meshRef = useRef<THREE.InstancedMesh>(null!);
-  const warming = useRef(true);
-
-  // Initialize pieces from your builder
-  const { pieces } = useMemo(() => {
-    return buildPieces(scene);
+  // Ensure buildPieces only mutates the cached GLTF geometries once
+  const { pieces, center, size } = useMemo(() => {
+    if (!scene.userData.__builtPieces) {
+      scene.userData.__builtPieces = buildPieces(scene);
+    }
+    return scene.userData.__builtPieces as ReturnType<typeof buildPieces>;
   }, [scene]);
 
-  const material = useMemo(() => materials.organic(brainAlbedo), [brainAlbedo]);
+  const material = useMemo(() => {
+    return materials.organic(brainAlbedo);
+  }, [brainAlbedo]);
+
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
+    if (!pieces) return;
+
+    pieces.forEach((p: Piece) => {
+      if (p.mesh) {
+        p.mesh.material = material;
+      }
+    });
+
+    // Required by lib/progress.ts for SPECIMEN loading step, CameraRig, and LabelDriver
+    S.pieces = pieces;
+    S.norm = { c: center, s: size };
+    S.remaining = 1;
+    LOAD.model = true;
+
     let active = true;
-    const compile = async () => {
+    const warmUp = async () => {
       try {
-        material.transparent = false;
-        await gl.compileAsync(meshRef.current, camera);
         material.transparent = true;
-        await gl.compileAsync(meshRef.current, camera);
-      } catch (e) {}
-      
+        material.depthWrite = true;
+        gl.compile(scene, camera);
+      } catch (e) {
+        console.warn("Shader compilation warning:", e);
+      }
       if (active) {
-        warming.current = false;
-        onReady?.(); // Dismisses loading screen
+        onReadyRef.current?.();
       }
     };
-    compile();
-    return () => { active = false; };
-  }, [gl, camera, material, onReady]);
 
-  // Pre-calculate initial matrices
-  const { instanceMatrix, colors } = useMemo(() => {
-    const matrix = new Float32Array(pieces.length * 16);
-    const colorArr = new Float32Array(pieces.length * 3);
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color("#ffffff");
-
-    pieces.forEach((p: any, i: number) => {
-      dummy.position.copy(p.home);
-      dummy.updateMatrix();
-      dummy.matrix.toArray(matrix, i * 16);
-      color.toArray(colorArr, i * 3);
-    });
-    return { instanceMatrix: matrix, colors: colorArr };
-  }, [pieces]);
+    warmUp();
+    return () => {
+      active = false;
+    };
+  }, [pieces, center, size, material, gl, camera, scene]);
 
   useFrame((state) => {
-    if (warming.current || !meshRef.current) return;
+    if (!pieces || pieces.length === 0) return;
 
     const t = state.clock.getElapsedTime();
-    const dummy = new THREE.Object3D();
     const targetRoom = E.room;
-    
-    // Smooth fade logic
+
     const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
-    // Shatter factor: H.p is scroll progress from progress.ts
-    const shatter = targetRoom === -1 ? (H.p || 0) : 1.2;
+    const prog = P.value;
+    let rem = 0;
 
-    pieces.forEach((p: any, i: number) => {
-      dummy.matrix.fromArray(instanceMatrix, i * 16);
-      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i];
+      if (p.layer === "hidden") {
+        p.mesh.visible = false;
+        continue;
+      }
 
-      // Animation based on your lib/pieces dir and dist
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatter);
-      dummy.position.lerp(targetPos, 0.08);
+      let u = targetRoom === -1 ? THREE.MathUtils.clamp((prog - p.start) / p.dur, 0, 1) : 1;
+      u = u * u * (3 - 2 * u);
+      rem += 1 - u;
 
-      const rotSpeed = 0.2 * (p.spin?.x || 1);
-      dummy.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.002;
-      dummy.rotation.y += Math.cos(t * rotSpeed * 0.8 + p.h) * 0.002;
+      _targetPos.copy(p.home).addScaledVector(p.dir, p.dist * u);
+      p.mesh.position.lerp(_targetPos, 0.12);
 
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
-    });
+      const rotSpeed = 0.2 * (p.spin.x || 1);
+      p.mesh.rotation.x = p.spin.x * u + Math.sin(t * rotSpeed + p.h) * 0.0015;
+      p.mesh.rotation.y = p.spin.y * u + Math.cos(t * rotSpeed * 0.8 + p.h) * 0.0015;
+      p.mesh.rotation.z = p.spin.z * u;
+    }
 
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    S.remaining = rem / Math.max(1, pieces.length);
   });
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[nodes.Cortex.geometry, material, pieces.length]}
-      frustumCulled={true}
-    >
-      <instancedBufferAttribute attach="instanceMatrix" count={pieces.length} array={instanceMatrix} itemSize={16} />
-      <instancedBufferAttribute attach="instanceColor" count={pieces.length} array={colors} itemSize={3} />
-    </instancedMesh>
-  );
+  return <primitive object={scene} />;
 }
+
+useGLTF.preload("/brain.glb");
