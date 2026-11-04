@@ -10,16 +10,20 @@ import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 import { H } from "../lib/progress";
 
-interface BrainModelProps {
-  onReady?: () => void;
-}
+const _targetPos = new THREE.Vector3();
 
-export default function BrainModel({ onReady }: BrainModelProps) {
+export default function BrainModel() {
   const { scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
-  // Load photographic texture
-  const brainAlbedo = useTexture("/textures/brain_albedo.jpg");
+  // Ensure this path matches your file inside public/textures/
+  const brainAlbedo = useTexture("/textures/brain_albedo.jpg", (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = Math.min(gl.capabilities.getMaxAnisotropy(), 16);
+    tex.needsUpdate = true;
+  });
 
   const { pieces } = useMemo(() => {
     return buildPieces(scene);
@@ -51,20 +55,18 @@ export default function BrainModel({ onReady }: BrainModelProps) {
         material.transparent = true;
         await gl.compileAsync(scene, camera);
       } catch (e) {
-        console.warn("Shader compile warning", e);
+        console.warn("Shader compilation warning:", e);
       }
 
       if (active) {
         warming.current = false;
-        // Signal to BrainScene that loading/warming is complete
-        onReady?.();
       }
     };
     compileBoth();
     return () => {
       active = false;
     };
-  }, [gl, camera, scene, material, onReady]);
+  }, [gl, camera, scene, material]);
 
   useFrame((state) => {
     if (warming.current || !pieces) return;
@@ -72,14 +74,12 @@ export default function BrainModel({ onReady }: BrainModelProps) {
     const t = state.clock.getElapsedTime();
     const targetRoom = E.room;
 
-    // Fade out when entering a room
     const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
-    // Shatter based on scroll (H.p) or room state
     const shatterFactor = targetRoom === -1 ? ((H as any).p ?? 0) : 1.2;
 
     pieces.forEach((p: Piece) => {
@@ -88,8 +88,8 @@ export default function BrainModel({ onReady }: BrainModelProps) {
         return;
       }
 
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatterFactor);
-      p.mesh.position.lerp(targetPos, 0.08);
+      _targetPos.copy(p.home).addScaledVector(p.dir, p.dist * shatterFactor);
+      p.mesh.position.lerp(_targetPos, 0.08);
 
       const rotSpeed = 0.2 * (p.spin.x || 1);
       p.mesh.rotation.x += Math.sin(t * rotSpeed + p.h) * 0.0015;
