@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { buildPieces, Piece } from "../lib/pieces";
 import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
+import { H } from "../lib/progress";
 
 export default function BrainModel() {
   const { scene } = useGLTF("/models/brain-transformed.glb") as any;
@@ -24,8 +25,11 @@ export default function BrainModel() {
   }, [brainAlbedo]);
 
   useEffect(() => {
+    if (!pieces) return;
     pieces.forEach((p: Piece) => {
-      p.mesh.material = material;
+      if (p.mesh) {
+        p.mesh.material = material;
+      }
     });
   }, [pieces, material]);
 
@@ -34,12 +38,16 @@ export default function BrainModel() {
   useEffect(() => {
     let active = true;
     const compileBoth = async () => {
-      material.transparent = false;
-      material.depthWrite = true;
-      await gl.compileAsync(scene, camera);
+      try {
+        material.transparent = false;
+        material.depthWrite = true;
+        await gl.compileAsync(scene, camera);
 
-      material.transparent = true;
-      await gl.compileAsync(scene, camera);
+        material.transparent = true;
+        await gl.compileAsync(scene, camera);
+      } catch (e) {
+        console.warn("Shader compilation warning:", e);
+      }
 
       if (active) {
         warming.current = false;
@@ -52,7 +60,7 @@ export default function BrainModel() {
   }, [gl, camera, scene, material]);
 
   useFrame((state) => {
-    if (warming.current) return;
+    if (warming.current || !pieces) return;
 
     const t = state.clock.getElapsedTime();
     const targetRoom = E.room;
@@ -63,7 +71,7 @@ export default function BrainModel() {
 
     if (!material.visible) return;
 
-    const currentFactor = targetRoom === -1 ? E.room0Factor : 1.2;
+    const shatterFactor = targetRoom === -1 ? ((H as any).p ?? 0) : 1.2;
 
     pieces.forEach((p: Piece) => {
       if (p.layer === "hidden") {
@@ -71,7 +79,7 @@ export default function BrainModel() {
         return;
       }
 
-      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * currentFactor);
+      const targetPos = p.home.clone().addScaledVector(p.dir, p.dist * shatterFactor);
       p.mesh.position.lerp(targetPos, 0.08);
 
       const rotSpeed = 0.2 * (p.spin.x || 1);
