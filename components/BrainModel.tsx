@@ -10,10 +10,15 @@ import { materials } from "../lib/materials";
 import { E } from "../lib/enter";
 import { H } from "../lib/progress";
 
-export default function BrainModel() {
+interface BrainModelProps {
+  onReady?: () => void;
+}
+
+export default function BrainModel({ onReady }: BrainModelProps) {
   const { scene } = useGLTF("/models/brain-transformed.glb") as any;
   const { gl, camera } = useThree();
 
+  // Load photographic texture
   const brainAlbedo = useTexture("/textures/brain_albedo.jpg");
 
   const { pieces } = useMemo(() => {
@@ -46,18 +51,20 @@ export default function BrainModel() {
         material.transparent = true;
         await gl.compileAsync(scene, camera);
       } catch (e) {
-        console.warn("Shader compilation warning:", e);
+        console.warn("Shader compile warning", e);
       }
 
       if (active) {
         warming.current = false;
+        // Signal to BrainScene that loading/warming is complete
+        onReady?.();
       }
     };
     compileBoth();
     return () => {
       active = false;
     };
-  }, [gl, camera, scene, material]);
+  }, [gl, camera, scene, material, onReady]);
 
   useFrame((state) => {
     if (warming.current || !pieces) return;
@@ -65,12 +72,14 @@ export default function BrainModel() {
     const t = state.clock.getElapsedTime();
     const targetRoom = E.room;
 
+    // Fade out when entering a room
     const targetOpacity = targetRoom === -1 ? 1 : 0;
     material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, 0.05);
     material.visible = material.opacity > 0.001;
 
     if (!material.visible) return;
 
+    // Shatter based on scroll (H.p) or room state
     const shatterFactor = targetRoom === -1 ? ((H as any).p ?? 0) : 1.2;
 
     pieces.forEach((p: Piece) => {
