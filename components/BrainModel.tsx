@@ -4,9 +4,9 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { E, H } from '@/lib/data';
-import { P, S, PieceBuilder } from '@/lib/pieces';
-import { organic } from '@/lib/materials';
+import { E, H } from '../lib/data';
+import { P, S, PieceBuilder } from '../lib/pieces';
+import { organic } from '../lib/materials';
 
 function mk<T extends THREE.Material>(m: T): T {
   m.transparent = true;
