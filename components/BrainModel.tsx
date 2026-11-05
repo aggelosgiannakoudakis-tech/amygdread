@@ -15,9 +15,8 @@ function mk<T extends THREE.Material>(m: T): T {
 }
 
 const makeMaterials = () => {
-  // Medical Specimen Palette
   const cortex = mk(organic(new THREE.MeshPhysicalMaterial({ 
-    color: 0xd4c3b0, // Cadaveric Tan
+    color: 0xd4c3b0, 
     roughness: 0.35,
     metalness: 0.05,
     emissive: 0x221108,
@@ -25,13 +24,13 @@ const makeMaterials = () => {
   }), 2.0, 0.45));
 
   const vessels = mk(organic(new THREE.MeshPhysicalMaterial({ 
-    color: 0x881111, // Deep Red
+    color: 0x881111, 
     roughness: 0.2,
     clearcoat: 1.0 
   }), 1.0, 0.2));
 
   const nerves = mk(organic(new THREE.MeshPhysicalMaterial({ 
-    color: 0xe5dccd, // Cream
+    color: 0xe5dccd, 
     roughness: 0.5 
   }), 1.0, 0.1));
 
@@ -70,7 +69,6 @@ export default function BrainModel() {
         testGroup.add(m);
       });
 
-      // Warm shaders to prevent freezing during scroll
       pieces.forEach(p => (p.material.opacity = 0));
       await gl.compileAsync(scene, camera);
       
@@ -83,11 +81,9 @@ export default function BrainModel() {
   }, [gl, camera, pieces]);
 
   useFrame((state, delta) => {
-    // Explosion movement
     P(pieces, E.room0Factor, E.room1Factor, E.room2Factor, E.room3Factor);
     S(pieces, E.room0Factor, E.room1Factor, E.room2Factor, E.room3Factor);
 
-    // Fade in/out logic
     const targetOpacity = H.value > 0.01 ? 1 : 0;
     pieces.forEach(p => {
       p.material.opacity = THREE.MathUtils.lerp(p.material.opacity, targetOpacity, 0.1);
